@@ -90,13 +90,11 @@ All break-glass events, and any time extensions to them, are recorded distinctly
 ### ✅ Completed (Phase 1 — Design & Documentation)
 - [x] System architecture design
 - [x] Database schema design
-- [x] Smart contract design & deployment to local Ganache instance
+- [x] Smart contract design
 - [x] Docker environment design (11-container topology)
 - [x] ML model design (dual-pipeline anomaly detection)
 - [x] API service design
 - [x] Implementation plan
-- [x] Formal Phase 1 project report
-- [x] Seminar presentation
 
 ### 🚧 In Progress (Phase 2 — Prototype Implementation)
 - [ ] FHIR federation layer across three simulated hospital nodes
@@ -153,10 +151,9 @@ Planned prerequisites:
 - Ganache (`--deterministic` flag)
 
 ```bash
-# Placeholder — setup steps will be documented as services come online
-git clone https://github.com/<your-username>/<repo-name>.git
-cd <repo-name>
-docker-compose up
+# Setup commands will be documented as services are implemented.
+git clone https://github.com/aditya-rathore04/federated-ehr-access.git
+cd federated-ehr-access
 ```
 
 ---
@@ -173,9 +170,13 @@ In addition to the four core interactive demos above, three document-only scenar
 
 ## Documentation
 
-- `/docs/phase1-report.docx` — Full Phase 1 project report (7 chapters)
-- `/docs/seminar-presentation.pptx` — Seminar presentation
-- Additional design docs (DB schema, API spec, ML model design) to be added under `/docs/`
+- [System architecture](docs/00_system_architecture.md)
+- [Database schema](docs/01_database_schema.md)
+- [Smart contract design](docs/02_smart_contract.md)
+- [Docker environment](docs/03_docker_environment.md)
+- [ML model design](docs/04_ml_model_design.md)
+- [API service design](docs/05_api_service_design.md)
+- [Project build phases](docs/project_build_phases.md)
 
 ---
 
