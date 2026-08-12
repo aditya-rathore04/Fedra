@@ -46,7 +46,7 @@ This system addresses both by combining standards-based interoperability (FHIR),
 | **Anomaly Detection** | Dual-pipeline ML (Isolation Forest + LSTM Autoencoder) flags suspicious access patterns |
 | **Access Points** | React.js web portal (clinical staff), Flutter mobile app (patients) |
 
-A high-level architecture diagram will be added here once finalized (`/docs/architecture.png`).
+![Federated EHR system architecture](docs/system_architecture.png)
 
 ### Break-Glass Emergency Access
 
