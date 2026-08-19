@@ -1,0 +1,46 @@
+networks:
+  mednet:
+    driver: bridge
+
+services:
+  hospital1-fhir:
+    image: hapiproject/hapi:latest
+    container_name: hospital1-fhir
+    ports: ["8081:8080"]
+    networks: [mednet]
+
+  hospital1-mongo:
+    image: mongo:7
+    container_name: hospital1-mongo
+    ports: ["27017:27017"]
+    networks: [mednet]
+
+  hospital2-fhir:
+    image: hapiproject/hapi:latest
+    container_name: hospital2-fhir
+    ports: ["8082:8080"]
+    networks: [mednet]
+
+  hospital2-mongo:
+    image: mongo:7
+    container_name: hospital2-mongo
+    ports: ["27018:27017"]
+    networks: [mednet]
+
+  hospital3-fhir:
+    image: hapiproject/hapi:latest
+    container_name: hospital3-fhir
+    ports: ["8083:8080"]
+    networks: [mednet]
+
+  hospital3-mongo:
+    image: mongo:7
+    container_name: hospital3-mongo
+    ports: ["27019:27017"]
+    networks: [mednet]
+
+  system-mongo:
+    image: mongo:7
+    container_name: system-mongo
+    ports: ["27020:27017"]
+    networks: [mednet]
