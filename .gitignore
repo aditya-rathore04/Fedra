@@ -70,3 +70,4 @@ coverage/
 *.lcov
 .coverage
 .parcel-cache/
+SETUP_GUIDE.md
