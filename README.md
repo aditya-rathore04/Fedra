@@ -112,6 +112,27 @@ All break-glass events, and any time extensions to them, are recorded distinctly
 - **Demo 1:** Standard clinical journey across three institutions
 - **Demo 2:** Emergency break-glass access (drug allergy preventing a medication error)
 - **Demo 3:** Patient Flutter app walkthrough
+- [x] Docker environment design (11-container topology)
+- [x] ML model design (dual-pipeline anomaly detection)
+- [x] API service design
+- [x] Implementation plan
+
+### 🚧 In Progress (Phase 2 — Prototype Implementation)
+- [ ] FHIR federation layer across three simulated hospital nodes
+- [ ] Full smart contract implementation & on-chain audit logging
+- [ ] Consent & access control service
+- [ ] Break-glass override workflow (end-to-end)
+- [ ] ML model training (Isolation Forest + LSTM Autoencoder)
+- [ ] API gateway
+- [ ] React.js clinical portal
+- [ ] Flutter patient mobile app
+- [ ] Full Docker Compose orchestration
+- [ ] Synthetic patient dataset generation (Synthea)
+
+### 📋 Planned Demos
+- **Demo 1:** Standard clinical journey across three institutions
+- **Demo 2:** Emergency break-glass access (drug allergy preventing a medication error)
+- **Demo 3:** Patient Flutter app walkthrough
 - **Demo 4:** ML anomaly detection layer (general + break-glass misuse detection)
 
 ---
@@ -123,17 +144,12 @@ All break-glass events, and any time extensions to them, are recorded distinctly
 ```
 .
 ├── docs/                   # Architecture docs, diagrams, Phase 1 report, presentation
-├── contracts/               # Solidity smart contracts
-├── services/
-│   ├── fhir-federation/     # FHIR node integration services
-│   ├── consent-service/     # Consent & access control
-│   ├── audit-service/       # Blockchain audit logging
-│   └── ml-anomaly/          # Isolation Forest + LSTM anomaly detection
-├── api-gateway/              # FastAPI / Node.js API gateway
-├── web-portal/               # React.js clinical staff portal
-├── mobile-app/                # Flutter patient app
-├── data/                       # Synthetic data generation scripts (Synthea)
-├── docker-compose.yml
+├── backend/                # Express.js REST API Gateway & JWT Identity Service
+├── frontend/               # Monospace Doctor Verification & Discovery Dashboard
+├── scripts/                # Automated Synthea FHIR & MongoDB Seeding Pipelines
+├── synthea_sample_data_fhir_latest/ # Synthetic FHIR R4 Patient Datasets
+├── docker-compose.yml      # Multi-container Docker topology (7 services)
+├── SETUP_GUIDE.md          # Complete Team Environment & Setup Guide
 └── README.md
 ```
 
@@ -141,30 +157,13 @@ All break-glass events, and any time extensions to them, are recorded distinctly
 
 ## Getting Started
 
-> ⚠️ Full setup instructions will be added once the initial services are implemented and containerized.
-
-Planned prerequisites:
-- Docker & Docker Compose
-- Node.js
-- Python 3.x
-- Flutter SDK
-- Ganache (`--deterministic` flag)
+> 🚀 **Quickstart:** Follow the comprehensive step-by-step [**Team Setup & Environment Guide**](SETUP_GUIDE.md) to set up Docker, ingest synthetic patient data, run the API gateway, and test the discovery portal.
 
 ```bash
-# Setup commands will be documented as services are implemented.
 git clone https://github.com/aditya-rathore04/federated-ehr-access.git
 cd federated-ehr-access
+# See SETUP_GUIDE.md for complete step-by-step instructions
 ```
-
----
-
-## Demo Scenarios
-
-In addition to the four core interactive demos above, three document-only scenarios are planned to illustrate edge cases:
-
-- Genetic disorder case (family history / Layer 2 consent chains)
-- Consent conflict resolution
-- Research data access request (secure enclave, patient opt-in)
 
 ---
 
