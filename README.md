@@ -139,11 +139,18 @@ All break-glass events, and any time extensions to them, are recorded distinctly
 
 ## Repository Structure
 
-> Structure will evolve as implementation progresses. Current planned layout:
-
 ```
 .
-├── docs/                   # Architecture docs, diagrams, Phase 1 report, presentation
+├── docs/                   # Architecture docs, schemas, specs (LOCKED design layer)
+├── project-memory/         # Operational truth, active session logs, cross-service contracts
+│   ├── 00_index.md         # Entry point & read order for developers/agents
+│   ├── 01_current_state.md # Phase status, working components, next tasks
+│   ├── 02_decisions_log.md # Locked architectural decisions (D-01 to D-09)
+│   ├── 03_contracts.md     # Cross-service boundary contracts (C-01 to C-08)
+│   ├── 04_session_log.md   # Append-only history of dev sessions
+│   ├── 05_pitfalls.md      # Known quirks & failure modes
+│   ├── 06_glossary.md      # Domain terms & demo personas
+│   └── 07_bug_triage.md    # Severity tiers & bug triage rules
 ├── backend/                # Express.js REST API Gateway & JWT Identity Service
 ├── frontend/               # Monospace Doctor Verification & Discovery Dashboard
 ├── scripts/                # Automated Synthea FHIR & MongoDB Seeding Pipelines
@@ -167,15 +174,25 @@ cd federated-ehr-access
 
 ---
 
-## Documentation
+## Documentation & Operational Memory
 
-- [System architecture](docs/00_system_architecture.md)
-- [Database schema](docs/01_database_schema.md)
-- [Smart contract design](docs/02_smart_contract.md)
-- [Docker environment](docs/03_docker_environment.md)
-- [ML model design](docs/04_ml_model_design.md)
-- [API service design](docs/05_api_service_design.md)
-- [Project build phases](docs/project_build_phases.md)
+### 🧠 Operational Memory (`project-memory/`)
+- [**Project Memory Index (Start Here)**](project-memory/00_index.md)
+- [Current System State & Active Tasks](project-memory/01_current_state.md)
+- [Architectural Decisions Log](project-memory/02_decisions_log.md)
+- [Cross-Service Contracts](project-memory/03_contracts.md)
+- [Work Session History](project-memory/04_session_log.md)
+- [Known Pitfalls & Technical Quirks](project-memory/05_pitfalls.md)
+- [Glossary & Demo Personas](project-memory/06_glossary.md)
+
+### 📐 Design Specifications (`docs/` - LOCKED)
+- [00 — System Architecture](docs/00_system_architecture.md)
+- [01 — Database Schema](docs/01_database_schema.md)
+- [02 — Smart Contract](docs/02_smart_contract.md)
+- [03 — Docker Environment](docs/03_docker_environment.md)
+- [04 — ML Model Design](docs/04_ml_model_design.md)
+- [05 — API Service Design](docs/05_api_service_design.md)
+- [Project Build Phases](docs/project_build_phases.md)
 
 ---
 
