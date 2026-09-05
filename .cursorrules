@@ -1,0 +1,22 @@
+# Cursor AI Rules — Federated Medical Record Discovery (FEDRA)
+
+You are working on FEDRA (Federated EHR Discovery and Access System).
+
+## 🛑 MANDATORY READ ORDER
+Before proposing edits, creating files, or writing code:
+1. Open and read `project-memory/00_index.md`.
+2. Check `project-memory/01_current_state.md` to know what is built, what is in-progress, and what the immediate next task is.
+3. Consult the relevant design spec in `docs/` (00 to 05) for architectural requirements.
+4. Consult `project-memory/03_contracts.md` before changing any data schema, API contract, or inter-service boundary.
+
+## ⚖️ BINDING CONSTRAINTS
+- `docs/` is the locked design spec. NEVER edit files in `docs/` to match broken code. If code conflicts with `docs/`, report the discrepancy.
+- Contracts (`C-01` to `C-08`) in `project-memory/03_contracts.md` are binding for all code.
+- Keccak256 hashes on-chain must be derived from canonical JSON serialization (sorted keys, no whitespace).
+- MongoDB `audit_events` must store pre-computed `ml_features` at write-time.
+- Do not leave fake half-working mocks. Placeholders must be explicitly stubbed.
+
+## 📝 SESSION PROTOCOL
+- When finishing a task or sprint:
+  - Update `project-memory/01_current_state.md` (check off completed items, update next task).
+  - Append a session entry to `project-memory/04_session_log.md`.
