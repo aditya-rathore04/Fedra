@@ -24,14 +24,17 @@ Every session must append a new entry to the bottom of this file.
 
 ---
 
-### [Template for Next Session]
-```markdown
-### YYYY-MM-DD · Session N · [Human / Agent / Pair]
-- **Goal:** [Primary goal of the session]
-- **Task:** [Reference task from 01_current_state.md]
-- **Done:** [Bullet points of completed work, PRs, files changed]
-- **Deviations:** [Any deviation from docs/ specifications — must be justified or flagged]
-- **Decisions Made:** [Any new decisions to log in 02_decisions_log.md]
-- **Bugs Found:** [Issues filed with severity tier per 07_bug_triage.md]
-- **Next Task:** [Clear handoff task for the next session]
-```
+### 2026-09-06 · Session 1 · Aditya & Antigravity Agent
+- **Goal:** Phase 1 review & Docker environment diagnosis.
+- **Task:** Clarified remaining tasks for Phase 1; diagnosed and fixed `docker compose start` error.
+- **Done:**
+  - Enumerated remaining Phase 1 deliverables (JWT `C-01` alignment, Gateway RBAC & rate limiting, discovery output standardization, end-of-phase verification test).
+  - Diagnosed `docker compose start` failure: container label project name was `fed-ehr` (from original folder), whereas compose in `FEDRA` looked for `fedra`.
+  - Added top-level `name: fed-ehr` to `docker-compose.yml`.
+  - Started all 7 containers (`hospital1-3-fhir`, `hospital1-3-mongo`, `system-mongo`) and verified health.
+  - Documented the behavior in `05_pitfalls.md` under Pitfall #8.
+- **Deviations:** None.
+- **Decisions Made:** Declared static `name: fed-ehr` in `docker-compose.yml` to ensure portable container resolution.
+- **Bugs Found:** None.
+- **Next Task:** Spec-compliant JWT auth alignment (Contract `C-01`) in `backend/index.js`.
+

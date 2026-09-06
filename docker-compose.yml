@@ -1,6 +1,9 @@
+name: fed-ehr
+
 networks:
   mednet:
     driver: bridge
+
 
 services:
   hospital1-fhir:

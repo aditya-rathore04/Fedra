@@ -43,3 +43,9 @@ A compilation of critical failure modes, non-obvious runtime behaviors, and prov
 - **Symptom:** Patient app fails to receive consent requests during local evaluation.
 - **Cause:** Google APNs / FCM push notifications require external internet egress and valid developer certificates that may not be available during offline campus evaluations.
 - **Rule:** Implement an in-app polling or WebSocket fallback banner in the Flutter app so demos function 100% reliably in offline local networks.
+
+## 8. Docker Compose Project Name Mismatch (`has no container to start`)
+- **Symptom:** Running `docker compose start` outputs `service "<service-name>" has no container to start`.
+- **Cause:** Docker Compose defaults the project name to the current directory name (e.g. `FEDRA` vs original `fed-ehr`). Containers created under one project name are ignored by compose commands executed with another project name.
+- **Rule:** Keep `name: fed-ehr` explicitly declared at the root of `docker-compose.yml` so all compose lifecycle commands resolve the existing container instances regardless of directory name.
+
