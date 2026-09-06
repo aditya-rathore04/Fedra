@@ -38,3 +38,28 @@ Every session must append a new entry to the bottom of this file.
 - **Bugs Found:** None.
 - **Next Task:** Spec-compliant JWT auth alignment (Contract `C-01`) in `backend/index.js`.
 
+---
+
+### 2026-09-06 · Session 2 · Aditya & Antigravity Agent
+- **Goal:** Spec-compliant JWT Authentication, RBAC Gateway Hardening & Phase 1 Milestone Completion on branch `backend/JWT`.
+- **Task:** Implement Contract `C-01`, role lifetimes, refresh, registration, discovery schema alignment, and automated verification suite.
+- **Done:**
+  - Refactored `backend/index.js`:
+    - Locked JWT token payload strictly to Contract `C-01` schema: `{ user_id, role, institution_id, issued_at, expires_at }`.
+    - Implemented role-based lifetimes: Doctor (8h), Patient (24h), Admin (4h), Emergency (2h).
+    - Added `bcrypt` password verification in `POST /auth/login`.
+    - Added `POST /auth/refresh` endpoint for active session renewal.
+    - Added `POST /auth/register/doctor` and `POST /auth/register/patient` onboarding endpoints.
+    - Added `requireRole` RBAC middleware (returns 403 Forbidden on role mismatch).
+    - Standardized `GET /patient/search` response format (`health_id`, `patient_name`, `total_institutions`, `institutions`).
+    - Added `POST /registry/register` endpoint for hospital nodes to index record summaries into `registry_db`.
+  - Created automated test suite `scripts/test_phase1_jwt.js` (33 assertions across 8 test suites):
+    - Tested Gateway health, C-01 claims schema, 8h/24h lifetimes, absence of extraneous payload claims, token refresh, registration, 401 unauthenticated, 403 forbidden role, doctor discovery query, registry index registration, and all 3 HAPI FHIR nodes.
+    - All 33/33 tests PASSED.
+  - Updated `project-memory/01_current_state.md` to mark Phase 1 Milestone completed.
+- **Deviations:** None.
+- **Decisions Made:** Preserved user presentation metadata in HTTP response body of `/auth/login` to retain zero-breakage compatibility with `frontend/dashboard.html` while strictly locking the signed JWT token payload itself to Contract `C-01`.
+- **Bugs Found:** None.
+- **Next Task:** Scaffold Phase 2 models and endpoints (Consent Service).
+
+
