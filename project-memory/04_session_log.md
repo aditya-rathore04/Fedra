@@ -76,6 +76,7 @@ Every session must append a new entry to the bottom of this file.
     - Resolved edge cases with user: added cataract surgery (day care) at Fortis for Krishnamurthy Rao; mapped surgeries to FHIR `Procedure` under metadata category `encounter`; added linked guardian (`Kavya Pillai`) for 9-month-old infant Anika Pillai.
     - Enriched all 6 patient profiles with standard clinical codes (SNOMED-CT, LOINC, RxNorm, CVX) and attending doctor references.
     - Added Section 7.4 (Teammate Distribution, Idempotency & Script Best Practices) and Section 8 (Verification & Test Commands across FHIR, MongoDB, Gateway, and UI).
+    - Clarified additive nature of the Indian cohort: records co-exist alongside existing Synthea data without deleting or replacing existing test records.
   - Rewrote and published the complete, production-ready `06_patient_seed_data_spec.md` as the implementation reference.
 - **Deviations:** None.
 - **Decisions Made:**

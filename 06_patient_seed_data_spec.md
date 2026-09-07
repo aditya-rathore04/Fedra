@@ -2,7 +2,7 @@
 
 > **File:** `06_patient_seed_data_spec.md`  
 > **Status:** **Approved Implementation Specification** (Aligned with System Architecture, Docker Environment, and Demo Phases)  
-> **Purpose:** Comprehensive specification for seeding six realistic Indian patient profiles across the three federated hospital nodes. Replaces generic/US Synthea data with clinically sound, multi-institutional histories that exercise discovery, standard consent, sensitive category gating, break-glass emergency access, and ML anomaly detection.  
+> **Purpose:** Comprehensive specification for seeding six realistic Indian patient profiles across the three federated hospital nodes. Adds rich, clinically sound Indian patient histories alongside the existing Synthea synthetic data to exercise discovery, standard consent, sensitive category gating, break-glass emergency access, and ML anomaly detection without deleting prior test records.  
 > **Audience:** Implementation engineers building the data generation scripts, FHIR transaction bundles, and MongoDB ingestion pipelines.
 
 ---
@@ -636,10 +636,10 @@ curl -s "http://localhost:8081/fhir/Practitioner/pract-onc-apollo" | grep -o 'An
 Verify that the local hospital databases and the central system registry contain the expected documents:
 
 ```bash
-# 1. Check Central Registry Entries (system-mongo :27020)
-# Should return 10 total registry entries across all 6 patients:
+# 1. Check Central Registry Entries for Indian Cohort (system-mongo :27020)
+# Returns 10 entries across the 6 Indian patients (added alongside existing Synthea entries):
 mongosh "mongodb://localhost:27020/registry_db" --quiet --eval \
-  "db.registry_entries.countDocuments()"
+  "db.registry_entries.countDocuments({ health_id: { \$in: ['ABHA-4471-2298-6613', 'ABHA-7712-4456-9081', 'ABHA-5528-1193-4402', 'ABHA-3390-6621-7845', 'ABHA-6604-8817-2239', 'ABHA-1147-9903-5561'] } })"
 # Expected output: 10
 
 # 2. Inspect Lakshmi's Central Registry Entry (verifying sensitive category flag):
@@ -653,8 +653,9 @@ mongosh "mongodb://localhost:27020/system_db" --quiet --eval \
 # Expected: DOC-1 (Dr. Aditya Sharma), DOC-2 (Dr. Priya Patel), DOC-3 (Dr. Rajesh Iyer), DOC-EMERGENCY (Dr. Rahul Verma)
 
 # 4. Check Hospital 1 Local Database (hospital1-mongo :27017)
+# Checks the 4 Indian patients who hold records at Apollo (co-existing with existing records):
 mongosh "mongodb://localhost:27017/hospital1_db" --quiet --eval \
-  "db.patients.countDocuments()"
+  "db.patients.countDocuments({ health_id: { \$in: ['ABHA-4471-2298-6613', 'ABHA-7712-4456-9081', 'ABHA-5528-1193-4402', 'ABHA-3390-6621-7845', 'ABHA-6604-8817-2239'] } })"
 # Expected: 4 patients (Lakshmi, Krishnamurthy, Saraswathi, Ananya, Vikram)
 
 # 5. Verify Safe Harbor Emergency Data for Lakshmi in Hospital 1 DB:
