@@ -1,7 +1,7 @@
 # Current State of System
 
-> **Last Updated:** 2026-09-06 (Session 2)  
-> **Current Phase:** Phase 1 (Foundation and Infrastructure) — Milestone Achieved (Week 3 Completed)  
+> **Last Updated:** 2026-09-07 (Session 3)  
+> **Current Phase:** Phase 1 (Foundation and Infrastructure) — Milestone Achieved; Phase 2 Seed Data Ready  
 > **Target Milestone:** Transition to Phase 2 (Core Access Control & Consent Service)
 
 ---
@@ -19,6 +19,7 @@
 | **Backend Gateway** | 🟢 Spec-Compliant | `localhost:3000` | Express gateway in `backend/index.js` with RBAC and JWT validation. |
 | **Identity Service (Auth / JWT)** | 🟢 Spec-Compliant | `backend/index.js` | Contract `C-01` verified, role lifetimes, `/auth/refresh`, registration endpoints active. |
 | **Doctor Portal (Frontend)** | 🟢 Working Prototype | `frontend/index.html`, `dashboard.html` | Login redirect, ABHA discovery query & card layout verified. |
+| **Patient Seed Data Spec** | 🟢 Production-Ready | `06_patient_seed_data_spec.md` | Fully specified 6 Indian patients, doctor roster, sensitive gates & schemas. |
 | **Consent Service** | ⚪ Not Started | Spec: `docs/05` | Planned for Phase 2 (Weeks 4–6) |
 | **Blockchain Audit Log** | ⚪ Not Started | Spec: `docs/02` | Contract written; Hardhat/Ganache deployment planned for Phase 3 |
 | **ML Anomaly Detection** | ⚪ Not Started | Spec: `docs/04` | FastAPI scoring service planned for Phase 4 |
@@ -43,6 +44,11 @@
   - `POST /registry/register` endpoint to index record pointers.
 - [x] Automated Phase 1 verification suite (`scripts/test_phase1_jwt.js`) passing 33/33 tests.
 - [x] Doctor Portal UI verified with new gateway auth.
+- [x] **Realistic Indian Patient Cohort & Multi-Hospital Seeding Specification (`06_patient_seed_data_spec.md`)**:
+  - Re-aligned hospital topology to Apollo (`HOSP-1`), Fortis (`HOSP-2`), and Max (`HOSP-3`).
+  - Added full Master Doctor & Practitioner Directory across FHIR and MongoDB.
+  - Formalized sensitive data access architecture (multi-gate consent, FHIR security labels, break-glass lockdown invariant).
+  - Specified clinical coding (SNOMED-CT, LOINC, RxNorm, CVX) and transaction bundle schemas for teammate handoff.
 
 ### 🔧 In Progress
 - [ ] Preparation for Phase 2 (Core Access Control & Consent Service scaffold).
@@ -53,7 +59,9 @@
 ---
 
 ## 🎯 Next Tasks for Coding Agent
-1. **Prepare Phase 2 Transition**:
+1. **Phase 2 Implementation**:
    - Design MongoDB schemas for `consent_policies` and `access_tokens` in `system_db` per `docs/01_database_schema.md`.
-   - Implement Consent Service endpoints per `docs/05_api_service_design.md` (`POST /consent/create`, `POST /consent/verify`).
+   - Implement Consent Service endpoints per `docs/05_api_service_design.md` (`POST /consent/create`, `POST /consent/verify`, `POST /consent/sensitive`).
+2. **Indian Cohort Data Seeder**:
+   - Implement `scripts/seed_indian_patients.js` based on `06_patient_seed_data_spec.md`.
 
