@@ -462,6 +462,40 @@
       padding: 4px 8px;
     }
 
+    .sensitive-box {
+      border-top: 1px solid #3A1F1F;
+      background: rgba(239, 68, 68, 0.05);
+      padding: 12px 14px;
+      margin-top: 14px;
+      border-left: 2px solid #EF4444;
+    }
+
+    .sensitive-label {
+      font-size: 10px;
+      color: #F87171;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+      display: block;
+      font-weight: 600;
+    }
+
+    .sensitive-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .sensitive-pill {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid #EF4444;
+      color: #FCA5A5;
+      font-size: 11px;
+      padding: 4px 10px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
     .footer {
       max-width: 1100px;
       width: 100%;
@@ -550,9 +584,12 @@
 
         <div class="quick-chips">
           <span class="chip-label">Suggestions:</span>
-          <button type="button" class="quick-chip" onclick="setQuery('ABHA-DEMO-001')">ABHA-001 (AdhiRaj • 3 Hospitals)</button>
-          <button type="button" class="quick-chip" onclick="setQuery('ABHA-DEMO-011')">ABHA-011 (Fortis)</button>
-          <button type="button" class="quick-chip" onclick="setQuery('ABHA-DEMO-021')">ABHA-021 (Max)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-4471-2298-6613')">Lakshmi (Apollo • 🔒 Sensitive: Psych)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-7712-4456-9081')">Krishnamurthy (Fortis & Apollo)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-5528-1193-4402')">Saraswathi (Apollo & Max)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-3390-6621-7845')">Ananya (Fortis & Apollo • 🔒 Repro)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-6604-8817-2239')">Vikram (Max & Apollo • 🔒 Substance)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-1147-9903-5561')">Anika (Fortis • Infant UIP)</button>
         </div>
       </form>
     </section>
@@ -744,6 +781,14 @@
                 ${pills}
               </div>
             </div>
+            ${(node.record_summary?.sensitive_categories_present || []).length > 0 ? `
+              <div class="sensitive-box">
+                <span class="sensitive-label">Sensitive Clinical Data (Multi-Gate Consent Required):</span>
+                <div class="sensitive-pills">
+                  ${node.record_summary.sensitive_categories_present.map(s => `<span class="sensitive-pill">🔒 ${s.toUpperCase()} (Sensitive Category — Locked)</span>`).join('')}
+                </div>
+              </div>
+            ` : ''}
           </div>
         `;
       });

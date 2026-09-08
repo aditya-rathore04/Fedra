@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "seed:patients": "node ../scripts/seed_indian_patients.js"
+    "seed:patients": "node ../scripts/seed_indian_patients.js",
+    "test:patients": "node ../scripts/test_indian_patients.js",
+    "test:phase1": "node ../scripts/test_phase1_jwt.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

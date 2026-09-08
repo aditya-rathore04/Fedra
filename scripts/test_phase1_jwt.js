@@ -44,7 +44,7 @@ async function runTests() {
     const docLoginRes = await fetch(`${GATEWAY_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: 'DOC-1' })
+      body: JSON.stringify({ id: 'DOC-1', password: 'password123' })
     });
     const docLogin = await docLoginRes.json();
     assert(docLoginRes.status === 200, 'Doctor login returns 200');
