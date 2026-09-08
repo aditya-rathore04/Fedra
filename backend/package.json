@@ -4,7 +4,8 @@
   "description": "Federated EHR Identity and Discovery Service",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "seed:patients": "node ../scripts/seed_indian_patients.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
