@@ -50,8 +50,18 @@
   - Formalized sensitive data access architecture (multi-gate consent, FHIR security labels, break-glass lockdown invariant).
   - Specified clinical coding (SNOMED-CT, LOINC, RxNorm, CVX) and transaction bundle schemas for teammate handoff.
 
+- [x] **Indian Cohort Seeding & End-to-End Verification**:
+  - Teammate implemented `scripts/seed_indian_patients.js` following `06_patient_seed_data_spec.md`.
+  - All 6 Indian patients and 12 practitioners seeded into FHIR nodes (ports 8081, 8082, 8083).
+  - 10 registry entries indexed in `registry_db.registry_entries`, with sensitive categories correctly flagged.
+  - Safe harbor emergency contacts and critical allergies stored in local hospital Mongo collections.
+  - Created automated verification suite `scripts/test_indian_patients.js` (45/45 tests passing across FHIR, Mongo, Gateway, RBAC).
+  - Maintained regression suite `scripts/test_phase1_jwt.js` (33/33 tests passing).
+  - Enhanced `frontend/dashboard.html` to display sensitive category badges (`🔒 SENSITIVE CATEGORY (Sensitive Category — Locked)`) and Indian cohort quick-selection chips.
+  - Added npm script shortcuts: `npm run seed:patients`, `npm run test:patients`, `npm run test:phase1`.
+
 ### 🔧 In Progress
-- [ ] Preparation for Phase 2 (Core Access Control & Consent Service scaffold).
+- [ ] Phase 2 Implementation (Core Access Control & Consent Service scaffold).
 
 ### ⛔ Blocked / Critical Attention
 - None.
@@ -62,6 +72,4 @@
 1. **Phase 2 Implementation**:
    - Design MongoDB schemas for `consent_policies` and `access_tokens` in `system_db` per `docs/01_database_schema.md`.
    - Implement Consent Service endpoints per `docs/05_api_service_design.md` (`POST /consent/create`, `POST /consent/verify`, `POST /consent/sensitive`).
-2. **Indian Cohort Data Seeder**:
-   - Implement `scripts/seed_indian_patients.js` based on `06_patient_seed_data_spec.md`.
 

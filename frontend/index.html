@@ -314,6 +314,7 @@
             <div class="chip-group">
               <button type="button" class="chip" onclick="selectId('DOC-1')">DOC-1 (Apollo Cardiology)</button>
               <button type="button" class="chip" onclick="selectId('DOC-2')">DOC-2 (Fortis Medicine)</button>
+              <button type="button" class="chip" onclick="selectId('DOC-3')">DOC-3 (Max Trauma)</button>
               <button type="button" class="chip" onclick="selectId('DOC-EMERGENCY')">DOC-EMERGENCY (ER)</button>
             </div>
           </div>
@@ -333,7 +334,12 @@
 
   <script>
     const API_BASE = 'http://localhost:3000';
-
+    const demoCreds = {
+      'DOC-1': { email: 'doc1@test.com', password: 'password123' },
+      'DOC-2': { email: 'doc2@test.com', password: 'password123' },
+      'DOC-3': { email: 'doc3@test.com', password: 'password123' },
+      'DOC-EMERGENCY': { email: 'er@test.com', password: 'password123' }
+    };
     // Clear stale session on login page load
     sessionStorage.removeItem('fed_ehr_token');
     sessionStorage.removeItem('fed_ehr_user');
@@ -379,12 +385,16 @@
       submitBtn.textContent = 'Verifying Credentials...';
 
       try {
+        const demo = demoCreds[input];
+        if (!demo) {
+          throw new Error('Demo credentials not found for ' + input);
+        }
         const response = await fetch(`${API_BASE}/auth/login`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ id: input })
+          body: JSON.stringify({ email: demo.email, password: demo.password })
         });
 
         const data = await response.json();
