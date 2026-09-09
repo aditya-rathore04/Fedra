@@ -60,8 +60,14 @@
   - Enhanced `frontend/dashboard.html` to display sensitive category badges (`🔒 SENSITIVE CATEGORY (Sensitive Category — Locked)`) and Indian cohort quick-selection chips.
   - Added npm script shortcuts: `npm run seed:patients`, `npm run test:patients`, `npm run test:phase1`.
 
+- [x] **Phase 2 Architecture & Team Work Distribution**:
+  - Established two-developer decoupled workflow (Mobile App vs Backend/Portal).
+  - Selected local single-laptop execution mode with Android/iOS loopback and USB reverse adb support.
+  - Authored comprehensive developer guide for Mobile App: `PHASE2_PATIENT_APP_GUIDE.md`.
+  - Authored comprehensive developer guide for Backend & Portal: `PHASE2_BACKEND_GUIDE.md`.
+
 ### 🔧 In Progress
-- [ ] Phase 2 Implementation (Core Access Control & Consent Service scaffold).
+- [ ] Phase 2 Implementation (Core Access Control & Consent Service in `backend/index.js`, Flutter patient app in `patient_app/`).
 
 ### ⛔ Blocked / Critical Attention
 - None.
