@@ -283,7 +283,7 @@ async function seedAdhiRaj() {
 
   // Add Patient User Account
   await systemDb.collection('users').insertOne({
-    user_id: 'PAT-001',
+    user_id: 'PAT-ADHIRAJ-001',
     role: 'patient',
     email: 'adhiraj@test.com',
     health_id: HEALTH_ID,

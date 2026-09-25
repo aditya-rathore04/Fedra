@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fedra — Patient Consent Dashboard</title>
+  <meta name="description"
+    content="Manage your medical record consent, privacy controls, and view who has accessed your health data on the Fedra federated health network.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      border-radius: 0 !important;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    body {
+      background-color: #0D0D0D;
+      color: #FFFFFF;
+      min-height: 100vh;
+      padding: 32px 24px 60px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(52, 211, 153, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(52, 211, 153, 0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      max-width: 1120px;
+      width: 100%;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ─── TOP NAV ─── */
+    .top-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #1A1A1A;
+      padding-bottom: 20px;
+      margin-bottom: 32px;
+    }
+
+    .brand-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: -0.01em;
+      color: #FFFFFF;
+    }
+
+    .brand-tag {
+      font-size: 10px;
+      color: #525252;
+      margin-top: 2px;
+    }
+
+    .patient-badge {
+      background: rgba(52, 211, 153, 0.08);
+      border: 1px solid rgba(52, 211, 153, 0.2);
+      color: #34D399;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      padding: 3px 8px;
+      text-transform: uppercase;
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .identity-pill {
+      font-size: 11px;
+      color: #9CA3AF;
+      border: 1px solid #1E1E1E;
+      background: #111111;
+      padding: 5px 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .abha-label {
+      font-size: 10px;
+      color: #34D399;
+      border: 1px solid rgba(52, 211, 153, 0.2);
+      padding: 2px 6px;
+    }
+
+    .btn-logout {
+      font-size: 11px;
+      color: #737373;
+      background: transparent;
+      border: 1px solid #262626;
+      padding: 5px 12px;
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      transition: all 0.1s ease;
+    }
+
+    .btn-logout:hover {
+      color: #F87171;
+      border-color: #F87171;
+    }
+
+    /* ─── PATIENT SUMMARY HERO ─── */
+    .patient-hero {
+      background: #111111;
+      border: 1px solid #1A1A1A;
+      border-left: 3px solid #34D399;
+      padding: 24px 28px;
+      margin-bottom: 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+    }
+
+    .hero-name {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: #FFFFFF;
+      margin-bottom: 6px;
+    }
+
+    .hero-sub {
+      font-size: 12px;
+      color: #525252;
+    }
+
+    .hero-sub span {
+      color: #34D399;
+    }
+
+    .hero-stats {
+      display: flex;
+      gap: 24px;
+      flex-shrink: 0;
+    }
+
+    .stat-block {
+      text-align: right;
+    }
+
+    .stat-val {
+      font-size: 22px;
+      font-weight: 700;
+      color: #FFFFFF;
+      letter-spacing: -0.03em;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: #525252;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-top: 2px;
+    }
+
+    .stat-val.green {
+      color: #34D399;
+    }
+
+    .stat-val.amber {
+      color: #FBBF24;
+    }
+
+    .stat-val.red {
+      color: #F87171;
+    }
+
+    /* ─── MAIN GRID ─── */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-stats {
+        display: none;
+      }
+    }
+
+    /* ─── PANEL SHARED ─── */
+    .panel {
+      background: #111111;
+      border: 1px solid #1A1A1A;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid #1A1A1A;
+    }
+
+    .panel-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #9CA3AF;
+    }
+
+    .panel-badge {
+      font-size: 10px;
+      padding: 2px 8px;
+      font-weight: 600;
+    }
+
+    .badge-pending {
+      background: rgba(251, 191, 36, 0.12);
+      color: #FBBF24;
+      border: 1px solid rgba(251, 191, 36, 0.2);
+    }
+
+    .badge-active {
+      background: rgba(52, 211, 153, 0.10);
+      color: #34D399;
+      border: 1px solid rgba(52, 211, 153, 0.2);
+    }
+
+    .badge-revoked {
+      background: rgba(248, 113, 113, 0.10);
+      color: #F87171;
+      border: 1px solid rgba(248, 113, 113, 0.2);
+    }
+
+    .badge-neutral {
+      background: #161616;
+      color: #525252;
+      border: 1px solid #1E1E1E;
+    }
+
+    /* ─── CONSENT REQUEST CARD ─── */
+    .consent-list {
+      padding: 0;
+    }
+
+    .consent-card {
+      padding: 20px 20px 0 20px;
+      border-bottom: 1px solid #141414;
+      transition: background 0.1s ease;
+    }
+
+    .consent-card:hover {
+      background: #131313;
+    }
+
+    .consent-card:last-child {
+      border-bottom: none;
+    }
+
+    .consent-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+
+    .doctor-info {
+      flex: 1;
+    }
+
+    .doctor-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #FFFFFF;
+      margin-bottom: 3px;
+    }
+
+    .doctor-meta {
+      font-size: 11px;
+      color: #525252;
+    }
+
+    .doctor-meta span {
+      color: #737373;
+    }
+
+    .consent-purpose {
+      font-size: 12px;
+      color: #6B7280;
+      line-height: 1.5;
+      padding: 10px 14px;
+      background: #0A0A0A;
+      border: 1px solid #1A1A1A;
+      margin-bottom: 14px;
+    }
+
+    .consent-purpose::before {
+      content: '"';
+      color: #34D399;
+    }
+
+    .consent-purpose::after {
+      content: '"';
+      color: #34D399;
+    }
+
+    /* Sensitive categories row for grant modal */
+    .sensitive-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .sensitive-toggle {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 10px;
+      background: #0A0A0A;
+      border: 1px solid #1E1E1E;
+      cursor: pointer;
+      font-size: 11px;
+      color: #737373;
+      user-select: none;
+      transition: all 0.1s ease;
+    }
+
+    .sensitive-toggle:hover {
+      border-color: #2E2E2E;
+      color: #9CA3AF;
+    }
+
+    .sensitive-toggle.locked {
+      color: #525252;
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+
+    .sensitive-toggle.active {
+      background: rgba(52, 211, 153, 0.06);
+      border-color: rgba(52, 211, 153, 0.25);
+      color: #34D399;
+    }
+
+    .toggle-icon {
+      font-size: 12px;
+    }
+
+    .consent-actions {
+      display: flex;
+      gap: 8px;
+      padding: 14px 0;
+    }
+
+    .btn-grant {
+      flex: 1;
+      background: #34D399;
+      color: #000000;
+      border: 1px solid #34D399;
+      padding: 9px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      transition: all 0.1s ease;
+    }
+
+    .btn-grant:hover {
+      background: #6EE7B7;
+      border-color: #6EE7B7;
+      transform: translateY(-1px);
+    }
+
+    .btn-grant:active {
+      background: #059669 !important;
+      transform: translateY(1px) !important;
+    }
+
+    .btn-grant:disabled {
+      background: #1A2E25;
+      color: #4D7A63;
+      border-color: #1E3A2A;
+      cursor: default;
+      transform: none;
+    }
+
+    .btn-deny {
+      padding: 9px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      background: transparent;
+      color: #F87171;
+      border: 1px solid rgba(248, 113, 113, 0.3);
+      transition: all 0.1s ease;
+    }
+
+    .btn-deny:hover {
+      background: rgba(248, 113, 113, 0.08);
+      border-color: #F87171;
+    }
+
+    .btn-deny:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    /* ─── ACTIVE GRANTS SECTION ─── */
+    .grant-card {
+      padding: 18px 20px;
+      border-bottom: 1px solid #141414;
+    }
+
+    .grant-card:last-child {
+      border-bottom: none;
+    }
+
+    .grant-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .grant-doctor {
+      font-size: 12px;
+      font-weight: 600;
+      color: #FFFFFF;
+    }
+
+    .grant-expiry {
+      font-size: 10px;
+      color: #525252;
+    }
+
+    .grant-expiry.soon {
+      color: #FBBF24;
+    }
+
+    .sensitive-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .sensitive-chip {
+      font-size: 10px;
+      padding: 3px 8px;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.1s ease;
+      border: 1px solid transparent;
+    }
+
+    .sensitive-chip.granted {
+      background: rgba(52, 211, 153, 0.08);
+      color: #34D399;
+      border-color: rgba(52, 211, 153, 0.2);
+    }
+
+    .sensitive-chip.locked {
+      background: #0F0F0F;
+      color: #404040;
+      border-color: #1E1E1E;
+    }
+
+    .sensitive-chip:hover {
+      opacity: 0.8;
+      transform: translateY(-1px);
+    }
+
+    .btn-revoke {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 5px 10px;
+      background: transparent;
+      color: #737373;
+      border: 1px solid #262626;
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      transition: all 0.1s ease;
+    }
+
+    .btn-revoke:hover {
+      color: #F87171;
+      border-color: rgba(248, 113, 113, 0.4);
+    }
+
+    /* ─── AUDIT TRAIL ─── */
+    .audit-list {
+      max-height: 420px;
+      overflow-y: auto;
+    }
+
+    .audit-event {
+      display: flex;
+      gap: 14px;
+      padding: 14px 20px;
+      border-bottom: 1px solid #141414;
+      align-items: flex-start;
+    }
+
+    .audit-event:last-child {
+      border-bottom: none;
+    }
+
+    .audit-dot {
+      width: 8px;
+      height: 8px;
+      flex-shrink: 0;
+      margin-top: 4px;
+    }
+
+    .dot-access {
+      background: #34D399;
+    }
+
+    .dot-consent {
+      background: #60A5FA;
+    }
+
+    .dot-revoke {
+      background: #F87171;
+    }
+
+    .dot-emergency {
+      background: #FBBF24;
+    }
+
+    .dot-sensitive {
+      background: #C084FC;
+    }
+
+    .audit-content {
+      flex: 1;
+    }
+
+    .audit-type {
+      font-size: 11px;
+      font-weight: 600;
+      color: #D1D5DB;
+      margin-bottom: 3px;
+    }
+
+    .audit-actor {
+      font-size: 11px;
+      color: #525252;
+    }
+
+    .audit-time {
+      font-size: 10px;
+      color: #374151;
+      margin-top: 3px;
+    }
+
+    /* ─── EMPTY STATES ─── */
+    .empty-state {
+      padding: 48px 20px;
+      text-align: center;
+    }
+
+    .empty-icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+      opacity: 0.3;
+    }
+
+    .empty-title {
+      font-size: 13px;
+      color: #525252;
+      margin-bottom: 6px;
+    }
+
+    .empty-sub {
+      font-size: 11px;
+      color: #374151;
+    }
+
+    /* ─── LOADING ─── */
+    .loading-row {
+      padding: 32px 20px;
+      text-align: center;
+      font-size: 12px;
+      color: #374151;
+    }
+
+    .loading-dots::after {
+      content: '';
+      animation: dots 1.5s steps(4, end) infinite;
+    }
+
+    @keyframes dots {
+      0% {
+        content: '';
+      }
+
+      25% {
+        content: '.';
+      }
+
+      50% {
+        content: '..';
+      }
+
+      75% {
+        content: '...';
+      }
+
+      100% {
+        content: '';
+      }
+    }
+
+    /* ─── TOAST NOTIFICATIONS ─── */
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      padding: 12px 16px;
+      font-size: 12px;
+      border: 1px solid transparent;
+      max-width: 320px;
+      animation: slideIn 0.2s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .toast-success {
+      background: #0D1F18;
+      border-color: rgba(52, 211, 153, 0.3);
+      color: #34D399;
+    }
+
+    .toast-error {
+      background: #1A0E0E;
+      border-color: rgba(248, 113, 113, 0.3);
+      color: #F87171;
+    }
+
+    .toast-info {
+      background: #0E1521;
+      border-color: rgba(96, 165, 250, 0.3);
+      color: #60A5FA;
+    }
+
+    /* ─── SECTION SEPARATOR ─── */
+    .section-separator {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 24px 0 16px;
+    }
+
+    .sep-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #374151;
+      flex-shrink: 0;
+    }
+
+    .sep-line {
+      flex: 1;
+      height: 1px;
+      background: #1A1A1A;
+    }
+
+    /* ─── RIGHT PANEL: PRIVACY CONTROLS ─── */
+    .privacy-control {
+      padding: 16px 20px;
+      border-bottom: 1px solid #141414;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .privacy-control:last-child {
+      border-bottom: none;
+    }
+
+    .privacy-info .pcat {
+      font-size: 12px;
+      font-weight: 600;
+      color: #E5E7EB;
+      margin-bottom: 3px;
+    }
+
+    .privacy-info .pdesc {
+      font-size: 11px;
+      color: #525252;
+      line-height: 1.4;
+    }
+
+    .privacy-indicator {
+      flex-shrink: 0;
+      font-size: 10px;
+      padding: 3px 8px;
+      font-weight: 700;
+    }
+
+    .ind-locked {
+      background: #0F0F0F;
+      color: #404040;
+      border: 1px solid #1E1E1E;
+    }
+
+    .ind-granted {
+      background: rgba(52, 211, 153, 0.08);
+      color: #34D399;
+      border: 1px solid rgba(52, 211, 153, 0.2);
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #0A0A0A;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #1E1E1E;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #2E2E2E;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="toast-container"></div>
+
+  <div class="container">
+    <!-- TOP NAV -->
+    <nav class="top-nav">
+      <div class="brand-left">
+        <div>
+          <div class="brand-title">Fedra Health Network</div>
+          <div class="brand-tag">Patient Consent Management Portal</div>
+        </div>
+        <div class="patient-badge">Patient</div>
+      </div>
+      <div class="nav-right">
+        <div class="identity-pill">
+          <span id="navPatientName">Loading...</span>
+          <span class="abha-label" id="navAbha">—</span>
+        </div>
+        <button class="btn-logout" onclick="logout()" id="logoutBtn">Sign Out</button>
+      </div>
+    </nav>
+
+    <!-- PATIENT HERO BANNER -->
+    <div class="patient-hero">
+      <div>
+        <div class="hero-name" id="heroName">Loading...</div>
+        <div class="hero-sub">
+          ABHA: <span id="heroAbha">—</span> &nbsp;•&nbsp;
+          Session valid until <span id="heroExpiry">—</span>
+        </div>
+      </div>
+      <div class="hero-stats">
+        <div class="stat-block">
+          <div class="stat-val amber" id="statPending">—</div>
+          <div class="stat-label">Pending</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-val green" id="statActive">—</div>
+          <div class="stat-label">Active Grants</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-val" id="statAudit">—</div>
+          <div class="stat-label">Access Events</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN GRID -->
+    <div class="main-grid">
+
+      <!-- LEFT COLUMN: CONSENT INBOX + ACTIVE GRANTS -->
+      <div class="left-col">
+
+        <!-- PENDING REQUESTS -->
+        <div class="panel" id="pendingPanel">
+          <div class="panel-header">
+            <div class="panel-title">Pending Consent Requests</div>
+            <div class="panel-badge badge-pending" id="pendingBadge">0 pending</div>
+          </div>
+          <div class="consent-list" id="pendingList">
+            <div class="loading-row"><span class="loading-dots">Loading requests</span></div>
+          </div>
+        </div>
+
+        <div class="section-separator">
+          <div class="sep-label">Active Access Grants</div>
+          <div class="sep-line"></div>
+        </div>
+
+        <!-- ACTIVE GRANTS -->
+        <div class="panel" id="activePanel">
+          <div class="panel-header">
+            <div class="panel-title">Doctors with Current Access</div>
+            <div class="panel-badge badge-active" id="activeBadge">0 active</div>
+          </div>
+          <div id="activeList">
+            <div class="loading-row"><span class="loading-dots">Loading grants</span></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN: PRIVACY OVERVIEW + AUDIT -->
+      <div class="right-col">
+
+        <!-- SENSITIVE CATEGORY OVERVIEW -->
+        <div class="panel" style="margin-bottom: 20px;">
+          <div class="panel-header">
+            <div class="panel-title">Sensitive Category Control</div>
+            <div class="panel-badge badge-neutral">4 categories</div>
+          </div>
+          <div id="privacyOverview">
+            <div class="privacy-control">
+              <div class="privacy-info">
+                <div class="pcat">🧠 Psychiatric</div>
+                <div class="pdesc">Mental health records, therapy notes, psychiatric diagnoses.</div>
+              </div>
+              <div class="privacy-indicator ind-locked" id="priv-psychiatric">LOCKED</div>
+            </div>
+            <div class="privacy-control">
+              <div class="privacy-info">
+                <div class="pcat">🌸 Reproductive</div>
+                <div class="pdesc">Gynecology, fertility, pregnancy, reproductive history.</div>
+              </div>
+              <div class="privacy-indicator ind-locked" id="priv-reproductive">LOCKED</div>
+            </div>
+            <div class="privacy-control">
+              <div class="privacy-info">
+                <div class="pcat">🔴 HIV / Infectious</div>
+                <div class="pdesc">HIV status, viral load, sexually transmitted conditions.</div>
+              </div>
+              <div class="privacy-indicator ind-locked" id="priv-hiv">LOCKED</div>
+            </div>
+            <div class="privacy-control">
+              <div class="privacy-info">
+                <div class="pcat">💊 Substance Abuse</div>
+                <div class="pdesc">Drug/alcohol history, addiction treatment records.</div>
+              </div>
+              <div class="privacy-indicator ind-locked" id="priv-substance_abuse">LOCKED</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AUDIT TRAIL -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Access Audit Trail</div>
+            <div class="panel-badge badge-neutral" id="auditBadge">0 events</div>
+          </div>
+          <div class="audit-list" id="auditList">
+            <div class="loading-row"><span class="loading-dots">Loading events</span></div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:3000';
+    let currentUser = null;
+    let currentToken = null;
+    let allPolicies = [];
+
+    // ─── INIT ───
+    async function init() {
+      const tokenRaw = sessionStorage.getItem('patient_token');
+      const userRaw = sessionStorage.getItem('patient_user');
+
+      if (!tokenRaw || !userRaw) {
+        window.location.href = 'patient-login.html';
+        return;
+      }
+
+      currentToken = tokenRaw;
+      currentUser = JSON.parse(userRaw);
+
+      // Populate identity
+      document.getElementById('navPatientName').textContent = currentUser.name || 'Patient';
+      document.getElementById('navAbha').textContent = currentUser.healthId || '—';
+      document.getElementById('heroName').textContent = currentUser.name || 'Patient';
+      document.getElementById('heroAbha').textContent = currentUser.healthId || '—';
+
+      if (currentUser.expiresAt) {
+        const exp = new Date(currentUser.expiresAt * 1000);
+        document.getElementById('heroExpiry').textContent = exp.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      }
+
+      // Parallel data load
+      await Promise.allSettled([
+        loadPendingRequests(),
+        loadActiveGrants(),
+        loadAuditTrail()
+      ]);
+    }
+
+    function authHeaders() {
+      return { 'Authorization': `Bearer ${currentToken}`, 'Content-Type': 'application/json' };
+    }
+
+    // ─── PENDING REQUESTS ───
+    async function loadPendingRequests() {
+      try {
+        const r = await fetch(`${API_BASE}/consent/pending`, { headers: authHeaders() });
+        if (!r.ok) throw new Error(await r.text());
+        const data = await r.json();
+
+        const pendingList = document.getElementById('pendingList');
+        const badge = document.getElementById('pendingBadge');
+
+        const pending = (data.pending_requests || []).filter(p => p.status === 'pending');
+        badge.textContent = `${pending.length} pending`;
+        document.getElementById('statPending').textContent = pending.length;
+
+        if (pending.length === 0) {
+          pendingList.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">✅</div>
+              <div class="empty-title">No pending requests</div>
+              <div class="empty-sub">You have no outstanding consent requests from doctors.</div>
+            </div>`;
+          return;
+        }
+
+        pendingList.innerHTML = pending.map(req => renderConsentRequest(req)).join('');
+
+      } catch (err) {
+        document.getElementById('pendingList').innerHTML = `<div class="loading-row" style="color:#F87171;">Error loading requests: ${err.message}</div>`;
+      }
+    }
+
+    function renderConsentRequest(req) {
+      const createdAt = new Date(req.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      return `
+        <div class="consent-card" id="req-${req.policy_id}">
+          <div class="consent-card-header">
+            <div class="doctor-info">
+              <div class="doctor-name">${escHtml(req.doctor_name || req.doctor_id)}</div>
+              <div class="doctor-meta">
+                <span>${escHtml(req.institution_name || req.institution_id)}</span> &nbsp;•&nbsp;
+                <span>Requested ${createdAt}</span>
+              </div>
+            </div>
+            <span class="panel-badge badge-pending">Pending</span>
+          </div>
+
+          <div class="consent-purpose">${escHtml(req.purpose || 'No purpose specified')}</div>
+
+          <div style="font-size:11px; color:#525252; margin-bottom:10px; text-transform:uppercase; letter-spacing:0.06em;">
+            Sensitive Category Access (optional):
+          </div>
+          <div class="sensitive-row">
+            ${renderSensitiveToggle(req.policy_id, 'psychiatric', '🧠', 'Psychiatric')}
+            ${renderSensitiveToggle(req.policy_id, 'reproductive', '🌸', 'Reproductive')}
+            ${renderSensitiveToggle(req.policy_id, 'hiv', '🔴', 'HIV / Infect.')}
+            ${renderSensitiveToggle(req.policy_id, 'substance_abuse', '💊', 'Substance')}
+          </div>
+
+          <div class="consent-actions">
+            <button class="btn-grant" id="grant-${req.policy_id}" onclick="grantConsent('${escHtml(req.request_id)}', '${escHtml(req.policy_id)}')">
+              Grant Access ✓
+            </button>
+            <button class="btn-deny" id="deny-${req.policy_id}" onclick="denyConsent('${escHtml(req.policy_id)}')">
+              Decline ✕
+            </button>
+          </div>
+        </div>`;
+    }
+
+    function renderSensitiveToggle(policyId, category, icon, label) {
+      return `
+        <div class="sensitive-toggle" id="tog-${policyId}-${category}" onclick="toggleSensitive('${policyId}', '${category}')">
+          <span class="toggle-icon">${icon}</span>
+          <span>${label}</span>
+        </div>`;
+    }
+
+    // Track which sensitive cats are toggled per pending request (UI state)
+    const sensitiveSelections = {};
+
+    function toggleSensitive(policyId, category) {
+      const el = document.getElementById(`tog-${policyId}-${category}`);
+      if (!sensitiveSelections[policyId]) sensitiveSelections[policyId] = {};
+      const current = sensitiveSelections[policyId][category] || false;
+      sensitiveSelections[policyId][category] = !current;
+      el.classList.toggle('active', !current);
+    }
+
+    async function grantConsent(requestId, policyId) {
+      const grantBtn = document.getElementById(`grant-${policyId}`);
+      const denyBtn = document.getElementById(`deny-${policyId}`);
+      grantBtn.disabled = true;
+      denyBtn.disabled = true;
+      grantBtn.textContent = 'Processing...';
+
+      const sel = sensitiveSelections[policyId] || {};
+      const scope = {
+        general_access: true,
+        sensitive_categories: {
+          psychiatric: !!sel.psychiatric,
+          reproductive: !!sel.reproductive,
+          hiv: !!sel.hiv,
+          substance_abuse: !!sel.substance_abuse
+        }
+      };
+
+      try {
+        const r = await fetch(`${API_BASE}/consent/grant`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ request_id: requestId, scope })
+        });
+
+        if (!r.ok) {
+          const err = await r.json();
+          throw new Error(err.error || 'Grant failed');
+        }
+
+        showToast('Access granted successfully. Doctor can now view your records.', 'success');
+        document.getElementById(`req-${policyId}`).style.opacity = '0';
+        setTimeout(() => {
+          Promise.all([loadPendingRequests(), loadActiveGrants(), loadAuditTrail()]);
+        }, 300);
+      } catch (err) {
+        showToast(`Grant failed: ${err.message}`, 'error');
+        grantBtn.disabled = false;
+        denyBtn.disabled = false;
+        grantBtn.textContent = 'Grant Access ✓';
+      }
+    }
+
+    async function denyConsent(policyId) {
+      const grantBtn = document.getElementById(`grant-${policyId}`);
+      const denyBtn = document.getElementById(`deny-${policyId}`);
+      grantBtn.disabled = true;
+      denyBtn.disabled = true;
+      denyBtn.textContent = 'Declining...';
+
+      try {
+        const r = await fetch(`${API_BASE}/consent/revoke`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ policy_id: policyId })
+        });
+
+        if (!r.ok) {
+          const err = await r.json();
+          throw new Error(err.error || 'Decline failed');
+        }
+
+        showToast('Request declined. The doctor has been notified.', 'info');
+        document.getElementById(`req-${policyId}`).style.opacity = '0';
+        setTimeout(() => loadPendingRequests(), 300);
+      } catch (err) {
+        showToast(`Decline failed: ${err.message}`, 'error');
+        grantBtn.disabled = false;
+        denyBtn.disabled = false;
+        denyBtn.textContent = 'Decline ✕';
+      }
+    }
+
+    // ─── ACTIVE GRANTS ───
+    async function loadActiveGrants() {
+      try {
+        const r = await fetch(`${API_BASE}/consent/policies`, { headers: authHeaders() });
+        if (!r.ok) throw new Error(await r.text());
+        const data = await r.json();
+
+        const allReqs = data.policies || [];
+        const active = allReqs.filter(p => p.status === 'active');
+        allPolicies = active;
+
+        document.getElementById('activeBadge').textContent = `${active.length} active`;
+        document.getElementById('statActive').textContent = active.length;
+
+        const listEl = document.getElementById('activeList');
+
+        if (active.length === 0) {
+          listEl.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">🔒</div>
+              <div class="empty-title">No active access grants</div>
+              <div class="empty-sub">No doctor currently has access to your records.</div>
+            </div>`;
+          return;
+        }
+
+        listEl.innerHTML = active.map(g => renderActiveGrant(g)).join('');
+        updatePrivacyOverview(active);
+
+      } catch (err) {
+        document.getElementById('activeList').innerHTML = `<div class="loading-row" style="color:#F87171;">Error: ${err.message}</div>`;
+      }
+    }
+
+    function renderActiveGrant(grant) {
+      const sc = grant.scope?.sensitive_categories || {};
+      const cats = ['psychiatric', 'reproductive', 'hiv', 'substance_abuse'];
+      const catLabels = { psychiatric: '🧠 Psych', reproductive: '🌸 Repro', hiv: '🔴 HIV', substance_abuse: '💊 Substance' };
+
+      const chipsHtml = cats.map(c => {
+        const granted = sc[c] === true;
+        return `
+          <span class="sensitive-chip ${granted ? 'granted' : 'locked'}"
+                title="${granted ? 'Click to revoke sensitive access' : 'Click to grant sensitive access'}"
+                onclick="toggleSensitiveGrant('${grant.policy_id}', '${c}', ${!granted})">
+            ${catLabels[c]} ${granted ? '✓' : '🔒'}
+          </span>`;
+      }).join('');
+
+      return `
+        <div class="grant-card" id="grant-${grant.policy_id}">
+          <div class="grant-header">
+            <div class="grant-doctor">${escHtml(grant.doctor_name || grant.doctor_id)} — ${escHtml(grant.institution_name || grant.institution_id)}</div>
+            <button class="btn-revoke" onclick="revokeGrant('${grant.policy_id}')">Revoke ✕</button>
+          </div>
+          <div class="sensitive-chips">${chipsHtml}</div>
+          <div style="font-size:10px; color:#374151;">
+            Purpose: ${escHtml(grant.purpose || '—')} &nbsp;•&nbsp;
+            Granted: ${grant.granted_at ? new Date(grant.granted_at).toLocaleDateString('en-IN') : '—'}
+          </div>
+        </div>`;
+    }
+
+    async function toggleSensitiveGrant(policyId, category, grant) {
+      try {
+        const r = await fetch(`${API_BASE}/consent/sensitive`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ policy_id: policyId, category, grant })
+        });
+
+        if (!r.ok) throw new Error((await r.json()).error);
+        showToast(`${grant ? 'Granted' : 'Revoked'} ${category} access.`, grant ? 'success' : 'info');
+        await loadActiveGrants();
+        await loadAuditTrail();
+      } catch (err) {
+        showToast(`Update failed: ${err.message}`, 'error');
+      }
+    }
+
+    async function revokeGrant(policyId) {
+      try {
+        const r = await fetch(`${API_BASE}/consent/revoke`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ policy_id: policyId })
+        });
+
+        if (!r.ok) throw new Error((await r.json()).error);
+        showToast('Access revoked. Doctor can no longer view your records.', 'info');
+        await Promise.all([loadActiveGrants(), loadAuditTrail()]);
+      } catch (err) {
+        showToast(`Revoke failed: ${err.message}`, 'error');
+      }
+    }
+
+    function updatePrivacyOverview(activeGrants) {
+      const cats = ['psychiatric', 'reproductive', 'hiv', 'substance_abuse'];
+      const summary = {};
+      cats.forEach(c => summary[c] = false);
+
+      activeGrants.forEach(g => {
+        const sc = g.scope?.sensitive_categories || {};
+        cats.forEach(c => {
+          if (sc[c] === true) summary[c] = true;
+        });
+      });
+
+      cats.forEach(c => {
+        const el = document.getElementById(`priv-${c}`);
+        if (el) {
+          if (summary[c]) {
+            el.textContent = 'GRANTED';
+            el.className = 'privacy-indicator ind-granted';
+          } else {
+            el.textContent = 'LOCKED';
+            el.className = 'privacy-indicator ind-locked';
+          }
+        }
+      });
+    }
+
+    // ─── AUDIT TRAIL ───
+    async function loadAuditTrail() {
+      if (!currentUser?.healthId) return;
+
+      try {
+        const r = await fetch(`${API_BASE}/audit/patient/${encodeURIComponent(currentUser.healthId)}`, {
+          headers: authHeaders()
+        });
+
+        if (!r.ok) throw new Error(await r.text());
+        const data = await r.json();
+        const events = data.audit_events || [];
+
+        document.getElementById('auditBadge').textContent = `${events.length} events`;
+        document.getElementById('statAudit').textContent = events.length;
+
+        const listEl = document.getElementById('auditList');
+
+        if (events.length === 0) {
+          listEl.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">📋</div>
+              <div class="empty-title">No audit events</div>
+              <div class="empty-sub">No access events have been recorded yet.</div>
+            </div>`;
+          return;
+        }
+
+        listEl.innerHTML = events.slice(0, 30).map(ev => renderAuditEvent(ev)).join('');
+
+      } catch (err) {
+        document.getElementById('auditList').innerHTML = `<div class="loading-row" style="color:#F87171;">Error: ${err.message}</div>`;
+      }
+    }
+
+    const auditTypeConfig = {
+      consent_request_created: { label: 'Consent Request Created', dot: 'dot-consent', icon: '📝' },
+      consent_granted: { label: 'Access Granted', dot: 'dot-consent', icon: '✅' },
+      consent_revoked: { label: 'Access Revoked', dot: 'dot-revoke', icon: '🚫' },
+      access_initiated: { label: 'Records Accessed', dot: 'dot-access', icon: '👁️' },
+      break_glass_triggered: { label: '⚠️ Emergency Break-Glass', dot: 'dot-emergency', icon: '🚨' },
+      sensitive_category_permission_changed: { label: 'Sensitive Category Updated', dot: 'dot-sensitive', icon: '🔐' }
+    };
+
+    function renderAuditEvent(ev) {
+      const conf = auditTypeConfig[ev.event_type] || { label: ev.event_type, dot: 'dot-consent', icon: '•' };
+      const time = new Date(ev.timestamp).toLocaleString('en-IN', {
+        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+      });
+      const actor = ev.actor?.id || 'Unknown';
+      const inst = ev.actor?.institution_id ? ` @ ${ev.actor.institution_id}` : '';
+
+      return `
+        <div class="audit-event">
+          <div class="audit-dot ${conf.dot}"></div>
+          <div class="audit-content">
+            <div class="audit-type">${conf.icon} ${conf.label}</div>
+            <div class="audit-actor">${escHtml(actor)}${escHtml(inst)}</div>
+            <div class="audit-time">${time}</div>
+          </div>
+        </div>`;
+    }
+
+    // ─── UTILS ───
+    function escHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    let toastTimer;
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
+    }
+
+    function logout() {
+      sessionStorage.removeItem('patient_token');
+      sessionStorage.removeItem('patient_user');
+      window.location.href = 'patient-login.html';
+    }
+
+    // Boot
+    init();
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fedra — Patient Health Portal</title>
+  <meta name="description" content="Secure patient health portal for managing consent, privacy settings, and federated medical record access on the Fedra network.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      border-radius: 0 !important;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    body {
+      background-color: #0D0D0D;
+      color: #FFFFFF;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 40px 24px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Subtle grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(52, 211, 153, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(52, 211, 153, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .header-bar {
+      max-width: 900px;
+      width: 100%;
+      margin: 0 auto 40px auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #1E1E1E;
+      padding-bottom: 20px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .brand-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .patient-badge {
+      background: rgba(52, 211, 153, 0.08);
+      border: 1px solid rgba(52, 211, 153, 0.25);
+      color: #34D399;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      padding: 3px 8px;
+      text-transform: uppercase;
+    }
+
+    .brand-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      text-transform: uppercase;
+      color: #FFFFFF;
+    }
+
+    .brand-subtitle {
+      font-size: 11px;
+      color: #525252;
+      margin-top: 3px;
+    }
+
+    .system-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: #737373;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      background-color: #34D399;
+      box-shadow: 0 0 8px rgba(52, 211, 153, 0.7);
+      display: inline-block;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(52, 211, 153, 0.7); }
+      50% { opacity: 0.6; box-shadow: 0 0 4px rgba(52, 211, 153, 0.3); }
+    }
+
+    .main-wrapper {
+      max-width: 540px;
+      width: 100%;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Accent line above card */
+    .main-wrapper::before {
+      content: '';
+      display: block;
+      height: 2px;
+      background: linear-gradient(90deg, #34D399, transparent);
+      margin-bottom: 0;
+    }
+
+    .auth-card {
+      background-color: #111111;
+      border: 1px solid #1E1E1E;
+      border-top: none;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(52, 211, 153, 0.04);
+    }
+
+    .page-tag {
+      font-size: 10px;
+      color: #34D399;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .page-tag::before {
+      content: '';
+      width: 16px;
+      height: 1px;
+      background: #34D399;
+      display: inline-block;
+    }
+
+    .auth-title {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      color: #FFFFFF;
+      margin-bottom: 10px;
+      line-height: 1.2;
+    }
+
+    .auth-desc {
+      font-size: 13px;
+      color: #6B7280;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+
+    .auth-desc strong {
+      color: #9CA3AF;
+    }
+
+    .form-group {
+      margin-bottom: 22px;
+    }
+
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #9CA3AF;
+      margin-bottom: 9px;
+    }
+
+    input {
+      width: 100%;
+      background: #0A0A0A;
+      border: 1px solid #2A2A2A;
+      color: #FFFFFF;
+      padding: 13px 15px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    input::placeholder {
+      color: #404040;
+    }
+
+    input:focus {
+      border-color: #34D399;
+      box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.3), 0 0 20px rgba(52, 211, 153, 0.05);
+    }
+
+    input.input-error {
+      border-color: #F87171 !important;
+      box-shadow: 0 0 0 1px #F87171 !important;
+    }
+
+    .quick-section {
+      margin-top: 12px;
+    }
+
+    .quick-label {
+      font-size: 10px;
+      color: #404040;
+      margin-bottom: 8px;
+      display: block;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .chip-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .chip {
+      background: #161616;
+      border: 1px solid #252525;
+      color: #737373;
+      padding: 5px 10px;
+      font-size: 11px;
+      cursor: pointer;
+      user-select: none;
+      font-family: 'JetBrains Mono', monospace;
+      transition: all 0.08s ease;
+    }
+
+    .chip:hover {
+      background: #1E2A24;
+      color: #34D399;
+      border-color: rgba(52, 211, 153, 0.35);
+      transform: translateY(-1px);
+    }
+
+    .chip:active {
+      background: #34D399 !important;
+      color: #000000 !important;
+      border-color: #34D399 !important;
+      transform: translateY(1px) scale(0.97) !important;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 28px 0;
+    }
+
+    .divider-line {
+      flex: 1;
+      height: 1px;
+      background: #1E1E1E;
+    }
+
+    .divider-text {
+      font-size: 10px;
+      color: #404040;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: #34D399;
+      color: #000000;
+      border: 1px solid #34D399;
+      padding: 14px 20px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      user-select: none;
+      margin-top: 28px;
+      font-family: 'JetBrains Mono', monospace;
+      transition: all 0.1s ease;
+      box-shadow: 0 4px 20px rgba(52, 211, 153, 0.2);
+    }
+
+    .btn-submit:hover {
+      background: #6EE7B7;
+      border-color: #6EE7B7;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 28px rgba(52, 211, 153, 0.35);
+    }
+
+    .btn-submit:active {
+      background: #059669 !important;
+      border-color: #059669 !important;
+      transform: translateY(2px) !important;
+      box-shadow: none !important;
+    }
+
+    .btn-submit:disabled {
+      background: #1A2E25;
+      color: #4D7A63;
+      border-color: #1E3A2A;
+      cursor: default;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .alert {
+      padding: 14px 16px;
+      font-size: 12px;
+      line-height: 1.5;
+      margin-bottom: 24px;
+      display: none;
+      border: 1px solid transparent;
+    }
+
+    .alert-error {
+      background: #1A0E0E;
+      border-color: #F87171;
+      color: #FCA5A5;
+    }
+
+    .alert-error strong {
+      color: #FFFFFF;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .info-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 14px 16px;
+      background: #111A15;
+      border: 1px solid rgba(52, 211, 153, 0.12);
+      margin-bottom: 28px;
+      font-size: 12px;
+      color: #6B7280;
+      line-height: 1.5;
+    }
+
+    .info-row span.icon {
+      color: #34D399;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .footer {
+      max-width: 900px;
+      width: 100%;
+      margin: 40px auto 0 auto;
+      border-top: 1px solid #1A1A1A;
+      padding-top: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: #383838;
+      position: relative;
+      z-index: 1;
+    }
+
+    .footer a {
+      color: #525252;
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      color: #34D399;
+    }
+
+    .switch-portal {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 12px;
+      color: #525252;
+    }
+
+    .switch-portal a {
+      color: #34D399;
+      text-decoration: none;
+    }
+
+    .switch-portal a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header-bar">
+    <div class="brand-left">
+      <div>
+        <div class="brand-title">Fedra Health Network</div>
+        <div class="brand-subtitle">Federated Electronic Health Record System</div>
+      </div>
+      <div class="patient-badge">Patient Portal</div>
+    </div>
+    <div class="system-status">
+      <span class="status-dot"></span>
+      <span id="gatewayStatus">Checking gateway...</span>
+    </div>
+  </div>
+
+  <main class="main-wrapper">
+    <div class="auth-card">
+      <div class="page-tag">Patient Identity Verification</div>
+      <h1 class="auth-title">Access Your Health Records</h1>
+      <p class="auth-desc">
+        Sign in with your <strong>ABHA credentials</strong> to manage consent for your medical records across the federated hospital network.
+      </p>
+
+      <div class="info-row">
+        <span class="icon">🔐</span>
+        <span>You are in full control. Doctors can only access your records after you approve their consent request.</span>
+      </div>
+
+      <div id="errorAlert" class="alert alert-error">
+        <strong id="errorHeadline">Authentication Failed</strong>
+        <span id="errorMessage">Invalid credentials.</span>
+      </div>
+
+      <form id="loginForm" onsubmit="handleLogin(event)" novalidate>
+        <div class="form-group">
+          <label for="patientId">ABHA ID or Registered Email</label>
+          <input
+            id="patientId"
+            type="text"
+            placeholder="e.g. ABHA-4471-2298-6613 or lakshmi@test.com"
+            autocomplete="off"
+            spellcheck="false"
+            oninput="clearInputError()"
+          />
+
+          <div class="quick-section">
+            <span class="quick-label">Demo Patients (Quick Login):</span>
+            <div class="chip-group">
+              <button type="button" class="chip" onclick="selectPatient('PAT-001')" id="chip-lakshmi">Lakshmi Venkatesh</button>
+              <button type="button" class="chip" onclick="selectPatient('PAT-002')" id="chip-krishna">Krishnamurthy Rao</button>
+              <button type="button" class="chip" onclick="selectPatient('PAT-003')" id="chip-sara">Saraswathi Nair</button>
+              <button type="button" class="chip" onclick="selectPatient('PAT-004')" id="chip-ananya">Ananya Reddy</button>
+              <button type="button" class="chip" onclick="selectPatient('PAT-005')" id="chip-vikram">Vikram Shetty</button>
+              <button type="button" class="chip" onclick="selectPatient('PAT-006')" id="chip-anika">Anika Pillai</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="patientPassword">Password</label>
+          <input
+            id="patientPassword"
+            type="password"
+            placeholder="Enter your password"
+            oninput="clearInputError()"
+          />
+        </div>
+
+        <button type="submit" id="submitBtn" class="btn-submit">
+          Verify Identity &amp; Enter Portal &rarr;
+        </button>
+      </form>
+
+      <div class="switch-portal">
+        Are you a doctor? <a href="index.html">Go to Practitioner Portal →</a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div>ABHA • FHIR R4 • Consent-Based Access Control</div>
+    <div>Phase 2 — Patient Portal</div>
+  </footer>
+
+  <script>
+    const API_BASE = 'http://localhost:3000';
+
+    // Demo patient credentials
+    const demoPatients = {
+      'PAT-001': { email: 'lakshmi-venkatesh@test.com', password: 'password123', name: 'Lakshmi Venkatesh' },
+      'PAT-002': { email: 'krishnamurthy-rao@test.com', password: 'password123', name: 'Krishnamurthy Rao' },
+      'PAT-003': { email: 'saraswathi-nair@test.com', password: 'password123', name: 'Saraswathi Nair' },
+      'PAT-004': { email: 'ananya-reddy@test.com', password: 'password123', name: 'Ananya Reddy' },
+      'PAT-005': { email: 'vikram-shetty@test.com', password: 'password123', name: 'Vikram Shetty' },
+      'PAT-006': { email: 'kavya.pillai@test.com', password: 'password123', name: 'Anika Pillai (Guardian: Kavya)' }
+    };
+
+    // Clear any stale session
+    sessionStorage.removeItem('patient_token');
+    sessionStorage.removeItem('patient_user');
+
+    // Check gateway health on load
+    (async () => {
+      const el = document.getElementById('gatewayStatus');
+      try {
+        const r = await fetch(`${API_BASE}/health`);
+        if (r.ok) {
+          el.textContent = 'Gateway Online (:3000)';
+        } else {
+          el.textContent = 'Gateway Degraded';
+          el.style.color = '#F87171';
+          document.querySelector('.status-dot').style.background = '#F87171';
+        }
+      } catch {
+        el.textContent = 'Gateway Offline';
+        el.style.color = '#F87171';
+        document.querySelector('.status-dot').style.background = '#F87171';
+        document.querySelector('.status-dot').style.animation = 'none';
+      }
+    })();
+
+    function clearInputError() {
+      document.getElementById('patientId').classList.remove('input-error');
+      document.getElementById('patientPassword').classList.remove('input-error');
+      document.getElementById('errorAlert').style.display = 'none';
+    }
+
+    function selectPatient(patientKey) {
+      const demo = demoPatients[patientKey];
+      if (!demo) return;
+      document.getElementById('patientId').value = demo.email;
+      document.getElementById('patientPassword').value = demo.password;
+      clearInputError();
+      document.getElementById('patientId').focus();
+    }
+
+    function showError(headline, message) {
+      const alert = document.getElementById('errorAlert');
+      document.getElementById('errorHeadline').textContent = headline;
+      document.getElementById('errorMessage').textContent = message;
+      alert.style.display = 'block';
+    }
+
+    async function handleLogin(e) {
+      if (e) e.preventDefault();
+      const idInput = document.getElementById('patientId');
+      const pwInput = document.getElementById('patientPassword');
+      const input = idInput.value.trim();
+      const password = pwInput.value;
+      const submitBtn = document.getElementById('submitBtn');
+
+      clearInputError();
+
+      if (!input) {
+        idInput.classList.add('input-error');
+        showError('Field Required', 'Please enter your ABHA ID or registered email address.');
+        idInput.focus();
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Verifying Identity...';
+
+      try {
+        const response = await fetch(`${API_BASE}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: input.includes('@') ? input : undefined,
+            id: !input.includes('@') ? input : undefined,
+            password: password || 'password123'
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Authentication rejected by gateway.');
+        }
+
+        if (data.role !== 'patient') {
+          throw new Error('This portal is for patients only. Please use the Practitioner Portal.');
+        }
+
+        // Store session
+        sessionStorage.setItem('patient_token', data.token);
+        sessionStorage.setItem('patient_user', JSON.stringify({
+          userId: data.user_id,
+          name: data.name,
+          role: data.role,
+          healthId: data.health_id,
+          expiresAt: data.expires_at
+        }));
+
+        submitBtn.textContent = 'Verified. Entering Portal...';
+        window.location.href = 'patient-dashboard.html';
+
+      } catch (err) {
+        let headline = 'Authentication Failed';
+        let detail = err.message;
+
+        if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+          headline = 'Gateway Offline';
+          detail = 'Cannot connect to http://localhost:3000. Please ensure the backend server is running.';
+        }
+
+        showError(headline, detail);
+        idInput.classList.add('input-error');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = 'Verify Identity &amp; Enter Portal &rarr;';
+      }
+    }
+  </script>
+</body>
+</html>
