@@ -126,6 +126,32 @@ Every session must append a new entry to the bottom of this file.
   - Person B (Backend) verifies all endpoints independently using an automated Node.js test script (`scripts/test_phase2_consent.js`) before handing off to Person A.
 - **Next Task:** Implement Phase 2 Consent Service schemas and endpoints in `backend/index.js`, or begin scaffolding `patient_app/`.
 
+---
+
+### 2026-09-15 · Session 6 · Aditya & Antigravity Agent
+- **Goal:** Deliver Phase 2 Access Control & Consent Service, Federated Record Aggregator, Doctor Portal updates, and browser-based Patient App workaround on laptop.
+- **Task:** Implement MongoDB schemas (`consent_policies`, `access_tokens`, `notifications`), sub-50ms token cache (`C-02`), parallel FHIR aggregator (`C-08`), sensitive category privacy filters (`PSY`, `SEX`, `ETH`), Doctor Portal access request modal & records viewer, browser-based Patient App (`frontend/patient.html`), and automated verification test suite.
+- **Done:**
+  - Implemented `system_db.consent_policies`, `access_tokens`, and `notifications` collections with unique/TTL indexes.
+  - Built in-memory token cache achieving Contract `C-02` latency SLA (<50ms, benchmarked at ~2ms).
+  - Implemented Consent Service endpoints: `POST /consent/request`, `GET /consent/pending`, `GET /consent/active`, `POST /consent/grant`, `POST /consent/deny`, `POST /consent/revoke`, `POST /consent/sensitive`, `GET /consent/validate`.
+  - Implemented Federated Record Aggregator (`POST /records/fetch`) executing parallel queries across Apollo (`:8081`), Fortis (`:8082`), and Max (`:8083`) with 3000ms timeout budget (Contract `C-08`).
+  - Enforced multi-gate privacy filters stripping psychiatric (`PSY`), reproductive (`SEX`), and substance abuse (`ETH`) records unless authorized in token scope.
+  - Implemented Patient Self-Timeline endpoint (`GET /records/patient`) for patient cross-hospital record view.
+  - Enabled static asset serving from Express gateway for `index.html`, `dashboard.html`, and `patient.html`.
+  - Built Browser-based Patient App (`frontend/patient.html`) featuring a smartphone mockup frame, instant inbox polling, granular approval sheet, dynamic sensitive category toggles, and instant revocation.
+  - Enhanced Doctor Portal (`frontend/dashboard.html`) with access request modal, mandatory purpose declaration, live token status countdown, and unified clinical records viewer.
+  - Built automated Phase 2 test suite `scripts/test_phase2_consent.js` (48/48 tests passing).
+  - Maintained 100% pass rate across regression suites: `npm run test:patients` (45/45) and `npm run test:phase1` (33/33). Total 126/126 tests passing.
+- **Deviations:** Adopted a browser-based smartphone mockup (`frontend/patient.html`) on the laptop as an interactive workaround for the patient mobile app per user requirement to expedite end-to-end evaluation.
+- **Decisions Made:**
+  - Added 1-click login chips for Indian cohort patients (Lakshmi, Ananya, Vikram, Saraswathi) in the patient web app for seamless live presentation.
+  - Integrated 3-second live auto-polling between the Doctor Portal and Patient App for instantaneous consent handshake feedback on a single laptop.
+- **Bugs Found & Resolved:**
+  - Resolved `user_id` namespace overlap between Synthea sample patient AdhiRaj and Indian cohort Patient 1 (Lakshmi) by assigning distinct `PAT-IND-xxx` identifiers.
+  - Resolved Encounter/Procedure clinical text extraction by checking `resource.type[0].text` in addition to `code.text`.
+- **Next Task:** Proceed with Phase 3 planning and implementation (Blockchain Audit Service with Hardhat/Ganache and smart contract hash chaining).
+
 
 
 

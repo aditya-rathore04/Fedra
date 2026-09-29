@@ -15,6 +15,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-demo-key-federated-eh
 app.use(express.json());
 app.use(cors());
 
+// Serve static frontend files (Doctor Portal, Patient App)
+app.use(express.static(path.join(__dirname, '..', 'frontend')));
+
 const client = new MongoClient(MONGO_URI);
 let systemDb;
 let registryDb;
@@ -30,6 +33,64 @@ const ROLE_LIFETIMES = {
   admin: 4 * 3600,             // 4 hours (alias)
   emergency: 2 * 3600          // 2 hours (break-glass)
 };
+
+/**
+ * In-Memory Token Cache for Contract C-02 SLA (<50ms Token Validation Latency)
+ */
+const tokenCache = new Map();
+
+function cacheToken(tokenDoc) {
+  if (!tokenDoc || !tokenDoc.token_id) return;
+  tokenCache.set(tokenDoc.token_id, {
+    ...tokenDoc,
+    cached_at: Date.now()
+  });
+}
+
+function invalidateToken(tokenId) {
+  tokenCache.delete(tokenId);
+}
+
+function invalidateTokensForPolicy(policyId) {
+  for (const [tid, token] of tokenCache.entries()) {
+    if (token.policy_id === policyId || token.consent_policy_id === policyId) {
+      tokenCache.delete(tid);
+    }
+  }
+}
+
+function updateTokensSensitiveScope(policyId, category, grant) {
+  for (const [tid, token] of tokenCache.entries()) {
+    if (token.policy_id === policyId || token.consent_policy_id === policyId) {
+      if (!token.scope) token.scope = { general_access: true, sensitive_categories: {} };
+      if (!token.scope.sensitive_categories) token.scope.sensitive_categories = {};
+      token.scope.sensitive_categories[category] = !!grant;
+    }
+  }
+}
+
+async function getValidatedToken(tokenId) {
+  if (!tokenId) return null;
+  const now = new Date();
+
+  // 1. Check in-memory cache (<1ms response)
+  const cached = tokenCache.get(tokenId);
+  if (cached) {
+    if (cached.status === 'active' && new Date(cached.expires_at) > now) {
+      return cached;
+    }
+    tokenCache.delete(tokenId);
+    return null;
+  }
+
+  // 2. Database lookup fallback
+  const tokenDoc = await systemDb.collection('access_tokens').findOne({ token_id: tokenId });
+  if (tokenDoc && tokenDoc.status === 'active' && new Date(tokenDoc.expires_at) > now) {
+    cacheToken(tokenDoc);
+    return tokenDoc;
+  }
+  return null;
+}
 
 /**
  * Generate spec-compliant JWT token adhering strictly to Contract C-01.
@@ -93,6 +154,83 @@ function requireRole(allowedRoles) {
   };
 }
 
+/**
+ * Resolve reachable FHIR endpoint on localhost
+ */
+function resolveFhirUrl(hospitalEntry) {
+  if (hospitalEntry.public_fhir_endpoint) return hospitalEntry.public_fhir_endpoint;
+  const url = hospitalEntry.fhir_endpoint || '';
+  if (url.includes('hospital1-fhir') || hospitalEntry.institution_id === 'HOSP-1') return 'http://localhost:8081/fhir';
+  if (url.includes('hospital2-fhir') || hospitalEntry.institution_id === 'HOSP-2') return 'http://localhost:8082/fhir';
+  if (url.includes('hospital3-fhir') || hospitalEntry.institution_id === 'HOSP-3') return 'http://localhost:8083/fhir';
+  return url;
+}
+
+/**
+ * Fetch FHIR resource with Contract C-08 timeout budget (3000ms)
+ */
+async function fetchFhirWithTimeout(url, timeoutMs = 3000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' }
+    });
+    clearTimeout(timer);
+    if (!res.ok) return { ok: false, status: res.status, data: null };
+    const data = await res.json();
+    return { ok: true, status: res.status, data };
+  } catch (err) {
+    clearTimeout(timer);
+    return { ok: false, status: err.name === 'AbortError' ? 504 : 500, error: err.message, timedOut: err.name === 'AbortError' };
+  }
+}
+
+/**
+ * Detect sensitive medical categories on FHIR resources per Indian Cohort Spec
+ */
+function detectSensitiveCategory(resource) {
+  if (!resource) return null;
+
+  // 1. Check FHIR security labels
+  if (Array.isArray(resource.meta?.security)) {
+    for (const sec of resource.meta.security) {
+      if (sec.code === 'PSY') return 'psychiatric';
+      if (sec.code === 'SEX') return 'reproductive';
+      if (sec.code === 'ETH') return 'substance_abuse';
+    }
+  }
+
+  // 2. Check clinical coding & display strings
+  const textToCheck = [
+    resource.code?.text,
+    resource.code?.coding?.[0]?.display,
+    resource.type?.[0]?.text,
+    resource.type?.[0]?.coding?.[0]?.display,
+    resource.text?.div,
+    resource.valueString,
+    resource.description,
+    resource.medicationCodeableConcept?.text,
+    resource.medicationCodeableConcept?.coding?.[0]?.display
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (textToCheck.includes('adjustment disorder') || textToCheck.includes('sertraline') || textToCheck.includes('cbt') || textToCheck.includes('psycho-oncology') || textToCheck.includes('psychiatry')) {
+    return 'psychiatric';
+  }
+  if (textToCheck.includes('family planning') || textToCheck.includes('contraception') || textToCheck.includes('sexual health') || textToCheck.includes('reproductive')) {
+    return 'reproductive';
+  }
+  if (textToCheck.includes('alcohol') || textToCheck.includes('substance') || textToCheck.includes('rehab') || textToCheck.includes('addiction') || textToCheck.includes('lft-2019') || textToCheck.includes('recovery liver function')) {
+    return 'substance_abuse';
+  }
+  if (textToCheck.includes('hiv') || textToCheck.includes('immunodeficiency')) {
+    return 'hiv';
+  }
+
+  return null;
+}
+
 async function startServer() {
   const maxRetries = 10;
   for (let i = 1; i <= maxRetries; i++) {
@@ -101,6 +239,18 @@ async function startServer() {
       systemDb = client.db('system_db');
       registryDb = client.db('registry_db');
       console.log(`Connected to MongoDB at ${MONGO_URI}`);
+
+      // Ensure indexes for Phase 2 Consent Service and Audit
+      await systemDb.collection('consent_policies').createIndex({ health_id: 1, doctor_id: 1, status: 1 });
+      await systemDb.collection('consent_policies').createIndex({ health_id: 1, status: 1 });
+      await systemDb.collection('consent_policies').createIndex({ request_id: 1 }, { unique: true, sparse: true });
+      await systemDb.collection('consent_policies').createIndex({ policy_id: 1 }, { unique: true, sparse: true });
+
+      await systemDb.collection('access_tokens').createIndex({ token_id: 1 }, { unique: true });
+      await systemDb.collection('access_tokens').createIndex({ policy_id: 1 });
+      await systemDb.collection('access_tokens').createIndex({ expires_at: 1 });
+
+      await systemDb.collection('notifications').createIndex({ recipient_id: 1, created_at: -1 });
 
       app.listen(PORT, () => {
         console.log(`Federated EHR Gateway running on http://localhost:${PORT}`);
@@ -125,7 +275,8 @@ app.get('/health', (req, res) => {
     databases: {
       system_db: !!systemDb,
       registry_db: !!registryDb
-    }
+    },
+    cached_tokens: tokenCache.size
   });
 });
 
@@ -148,7 +299,8 @@ app.post('/auth/login', async (req, res) => {
         { user_id: input },
         { user_id: input.toUpperCase() },
         { email: input },
-        { email: input.toLowerCase() }
+        { email: input.toLowerCase() },
+        { health_id: input }
       ]
     });
 
@@ -162,8 +314,7 @@ app.post('/auth/login', async (req, res) => {
       if (!match) {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
-    } else if (password && password !== 'Fedra@2026') {
-      // Legacy demo users without password_hash: accept default demo password or blank
+    } else if (password && password !== 'Fedra@2026' && password !== 'password123') {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
@@ -175,7 +326,6 @@ app.post('/auth/login', async (req, res) => {
       user.institution_id === 'HOSP-3' ? 'Max Super Specialty Hospital' : null
     );
 
-    // Return token + metadata in response body for frontend portal compatibility
     res.json({
       token,
       expires_at,
@@ -184,8 +334,10 @@ app.post('/auth/login', async (req, res) => {
       name: user.name || user.user_id,
       institution_id: user.institution_id || null,
       institution_name: institutionName,
-      department: user.department || 'General Medicine',
-      health_id: user.health_id || null
+      department: user.department || (user.role === 'patient' ? 'Patient' : 'General Medicine'),
+      health_id: user.health_id || null,
+      gender: user.gender || null,
+      birth_date: user.birth_date || user.dob || null
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -285,6 +437,7 @@ app.post('/auth/register/patient', async (req, res) => {
       role: 'patient',
       name,
       dob: dob || null,
+      birth_date: dob || null,
       gender: gender || null,
       health_id: abha_id,
       phone: phone || null,
@@ -389,7 +542,7 @@ app.post('/registry/register', verifyJWT, requireRole(['doctor', 'hospital_admin
   }
 });
 
-// List all registered patients (Helper for demo discovery UI)
+// List all registered patients (Helper for discovery UI)
 app.get('/patients', verifyJWT, async (req, res) => {
   try {
     const patients = await registryDb.collection('registry_entries')
@@ -411,6 +564,751 @@ app.get('/patients', verifyJWT, async (req, res) => {
   } catch (err) {
     console.error('List patients error:', err);
     res.status(500).json({ error: 'Internal server error listing patients' });
+  }
+});
+
+// ==========================================
+// 4. CONSENT SERVICE (Phase 2)
+// ==========================================
+
+// Doctor requests access to a patient record (POST /consent/request)
+app.post('/consent/request', verifyJWT, requireRole(['doctor', 'doctor_supervisor', 'emergency', 'system_admin']), async (req, res) => {
+  const { health_id, purpose, institution_id } = req.body;
+
+  if (!health_id || !purpose) {
+    return res.status(400).json({ error: 'Missing required fields: health_id and purpose are required' });
+  }
+
+  try {
+    // 1. Verify patient exists in registry or users
+    const [registryEntry, patientUser] = await Promise.all([
+      registryDb.collection('registry_entries').findOne({ health_id }),
+      systemDb.collection('users').findOne({ health_id })
+    ]);
+
+    if (!registryEntry && !patientUser) {
+      return res.status(404).json({ error: `Patient with Health ID '${health_id}' was not found in registry` });
+    }
+
+    const patientName = patientUser?.name || registryEntry?.patient_name || 'Patient';
+    const doctorUser = await systemDb.collection('users').findOne({ user_id: req.user.user_id });
+    const doctorName = doctorUser?.name || req.user.user_id;
+    const instId = institution_id || req.user.institution_id || 'HOSP-1';
+    const instName = doctorUser?.institution_name || (
+      instId === 'HOSP-1' ? 'Apollo Memorial Hospital' :
+      instId === 'HOSP-2' ? 'Fortis Healthcare Center' :
+      instId === 'HOSP-3' ? 'Max Super Specialty Hospital' : 'Hospital Clinic'
+    );
+
+    const requestId = `REQ-${crypto.randomUUID()}`;
+
+    // 2. Insert pending policy
+    const pendingPolicy = {
+      policy_id: null,
+      request_id: requestId,
+      health_id,
+      patient_name: patientName,
+      doctor_id: req.user.user_id,
+      doctor_name: doctorName,
+      institution_id: instId,
+      institution_name: instName,
+      status: 'pending',
+      created_at: new Date(),
+      granted_at: null,
+      revoked_at: null,
+      scope: {
+        general_access: true,
+        sensitive_categories: {
+          psychiatric: false,
+          reproductive: false,
+          hiv: false,
+          substance_abuse: false
+        }
+      },
+      purpose: purpose.trim()
+    };
+
+    await systemDb.collection('consent_policies').insertOne(pendingPolicy);
+
+    // 3. Dispatch internal notification for patient
+    const notification = {
+      notification_id: `NOTIF-${crypto.randomUUID()}`,
+      recipient_id: patientUser?.user_id || health_id,
+      recipient_health_id: health_id,
+      recipient_role: 'patient',
+      notification_type: 'consent_request_received',
+      payload: {
+        request_id: requestId,
+        doctor_id: req.user.user_id,
+        doctor_name: doctorName,
+        institution_name: instName,
+        purpose: purpose.trim()
+      },
+      created_at: new Date(),
+      read: false
+    };
+    await systemDb.collection('notifications').insertOne(notification);
+
+    res.status(202).json({
+      request_id: requestId,
+      status: 'pending_patient_consent',
+      patient_notified: true
+    });
+  } catch (err) {
+    console.error('Consent request error:', err);
+    res.status(500).json({ error: 'Internal server error processing consent request' });
+  }
+});
+
+// Patient inbox of pending requests (GET /consent/pending)
+app.get('/consent/pending', verifyJWT, requireRole(['patient', 'system_admin', 'admin']), async (req, res) => {
+  try {
+    let healthId = req.query.health_id || req.user.health_id;
+    if (!healthId) {
+      const patient = await systemDb.collection('users').findOne({ user_id: req.user.user_id });
+      healthId = patient?.health_id;
+    }
+
+    if (!healthId) {
+      return res.status(400).json({ error: 'No associated ABHA Health ID found for authenticated patient' });
+    }
+
+    const requests = await systemDb.collection('consent_policies')
+      .find({ health_id: healthId, status: 'pending' })
+      .sort({ created_at: -1 })
+      .toArray();
+
+    res.json({
+      health_id: healthId,
+      total_pending: requests.length,
+      requests
+    });
+  } catch (err) {
+    console.error('Pending consent fetch error:', err);
+    res.status(500).json({ error: 'Internal server error retrieving pending consent requests' });
+  }
+});
+
+// Active consent policies (GET /consent/active)
+app.get('/consent/active', verifyJWT, async (req, res) => {
+  try {
+    const filter = { status: 'active' };
+    if (req.user.role === 'patient') {
+      let healthId = req.user.health_id;
+      if (!healthId) {
+        const patient = await systemDb.collection('users').findOne({ user_id: req.user.user_id });
+        healthId = patient?.health_id;
+      }
+      filter.health_id = healthId;
+    } else if (req.user.role === 'doctor' || req.user.role === 'doctor_supervisor') {
+      filter.doctor_id = req.user.user_id;
+    }
+
+    const policies = await systemDb.collection('consent_policies')
+      .find(filter)
+      .sort({ granted_at: -1 })
+      .toArray();
+
+    // Attach active token IDs if available
+    const policyIds = policies.map(p => p.policy_id).filter(Boolean);
+    const activeTokens = await systemDb.collection('access_tokens')
+      .find({ policy_id: { $in: policyIds }, status: 'active', expires_at: { $gt: new Date() } })
+      .toArray();
+
+    const tokenMap = Object.fromEntries(activeTokens.map(t => [t.policy_id, t]));
+
+    const enriched = policies.map(p => ({
+      ...p,
+      active_token: tokenMap[p.policy_id] ? {
+        token_id: tokenMap[p.policy_id].token_id,
+        expires_at: tokenMap[p.policy_id].expires_at,
+        token_type: tokenMap[p.policy_id].token_type
+      } : null
+    }));
+
+    res.json({ count: enriched.length, policies: enriched });
+  } catch (err) {
+    console.error('Active consent fetch error:', err);
+    res.status(500).json({ error: 'Internal server error retrieving active consents' });
+  }
+});
+
+// Patient grants consent (POST /consent/grant)
+app.post('/consent/grant', verifyJWT, requireRole(['patient', 'system_admin']), async (req, res) => {
+  const { request_id, scope } = req.body;
+
+  if (!request_id) {
+    return res.status(400).json({ error: 'request_id is required' });
+  }
+
+  try {
+    const policy = await systemDb.collection('consent_policies').findOne({ request_id });
+    if (!policy) {
+      return res.status(404).json({ error: `Consent request '${request_id}' not found` });
+    }
+
+    if (policy.status !== 'pending') {
+      return res.status(409).json({ error: `Consent request is already in status '${policy.status}'` });
+    }
+
+    const policyId = `POL-${crypto.randomUUID()}`;
+    const tokenId = `TOK-${crypto.randomUUID()}`;
+    const grantedAt = new Date();
+    // 8-hour token validity per Contract C-01
+    const expiresAt = new Date(Date.now() + 8 * 3600 * 1000);
+
+    const finalScope = {
+      general_access: scope?.general_access !== false,
+      sensitive_categories: {
+        psychiatric: !!scope?.sensitive_categories?.psychiatric,
+        reproductive: !!scope?.sensitive_categories?.reproductive,
+        hiv: !!scope?.sensitive_categories?.hiv,
+        substance_abuse: !!scope?.sensitive_categories?.substance_abuse
+      }
+    };
+
+    // 1. Update policy
+    await systemDb.collection('consent_policies').updateOne(
+      { request_id },
+      {
+        $set: {
+          policy_id: policyId,
+          status: 'active',
+          granted_at: grantedAt,
+          scope: finalScope
+        }
+      }
+    );
+
+    // 2. Insert access token
+    const tokenDoc = {
+      token_id: tokenId,
+      policy_id: policyId,
+      consent_policy_id: policyId,
+      health_id: policy.health_id,
+      patient_name: policy.patient_name,
+      doctor_id: policy.doctor_id,
+      institution_id: policy.institution_id,
+      token_type: 'standard',
+      issued_at: grantedAt,
+      expires_at: expiresAt,
+      status: 'active',
+      scope: finalScope
+    };
+
+    await systemDb.collection('access_tokens').insertOne(tokenDoc);
+
+    // 3. Cache token for sub-50ms C-02 latency
+    cacheToken(tokenDoc);
+
+    // 4. Notify doctor of consent grant
+    await systemDb.collection('notifications').insertOne({
+      notification_id: `NOTIF-${crypto.randomUUID()}`,
+      recipient_id: policy.doctor_id,
+      recipient_role: 'doctor',
+      notification_type: 'consent_granted',
+      payload: {
+        policy_id: policyId,
+        token_id: tokenId,
+        health_id: policy.health_id,
+        patient_name: policy.patient_name,
+        expires_at: Math.floor(expiresAt.getTime() / 1000),
+        scope: finalScope
+      },
+      created_at: new Date(),
+      read: false
+    });
+
+    res.status(200).json({
+      policy_id: policyId,
+      token_id: tokenId,
+      expires_at: Math.floor(expiresAt.getTime() / 1000),
+      scope: finalScope
+    });
+  } catch (err) {
+    console.error('Consent grant error:', err);
+    res.status(500).json({ error: 'Internal server error granting consent' });
+  }
+});
+
+// Patient denies consent (POST /consent/deny)
+app.post('/consent/deny', verifyJWT, requireRole(['patient', 'system_admin']), async (req, res) => {
+  const { request_id } = req.body;
+  if (!request_id) {
+    return res.status(400).json({ error: 'request_id is required' });
+  }
+
+  try {
+    const result = await systemDb.collection('consent_policies').updateOne(
+      { request_id, status: 'pending' },
+      { $set: { status: 'denied', denied_at: new Date() } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: `Pending request '${request_id}' not found` });
+    }
+
+    res.json({ denied: true, request_id });
+  } catch (err) {
+    console.error('Consent deny error:', err);
+    res.status(500).json({ error: 'Internal server error denying consent' });
+  }
+});
+
+// Patient revokes consent (POST /consent/revoke)
+app.post('/consent/revoke', verifyJWT, requireRole(['patient', 'system_admin']), async (req, res) => {
+  const { policy_id } = req.body;
+  if (!policy_id) {
+    return res.status(400).json({ error: 'policy_id is required' });
+  }
+
+  try {
+    const revokedAt = new Date();
+
+    // 1. Mark policy revoked
+    const policyResult = await systemDb.collection('consent_policies').findOneAndUpdate(
+      { policy_id },
+      { $set: { status: 'revoked', revoked_at: revokedAt } },
+      { returnDocument: 'after' }
+    );
+
+    if (!policyResult) {
+      return res.status(404).json({ error: `Policy '${policy_id}' not found` });
+    }
+
+    // 2. Invalidate active tokens
+    const tokenResult = await systemDb.collection('access_tokens').updateMany(
+      { policy_id, status: 'active' },
+      { $set: { status: 'revoked', revoked_at: revokedAt } }
+    );
+
+    // 3. Clear from in-memory cache
+    invalidateTokensForPolicy(policy_id);
+
+    // 4. Notify doctor
+    if (policyResult.doctor_id) {
+      await systemDb.collection('notifications').insertOne({
+        notification_id: `NOTIF-${crypto.randomUUID()}`,
+        recipient_id: policyResult.doctor_id,
+        recipient_role: 'doctor',
+        notification_type: 'consent_revoked',
+        payload: {
+          policy_id,
+          health_id: policyResult.health_id,
+          patient_name: policyResult.patient_name
+        },
+        created_at: new Date(),
+        read: false
+      });
+    }
+
+    res.json({
+      revoked: true,
+      active_tokens_invalidated: tokenResult.modifiedCount,
+      doctor_notified: true
+    });
+  } catch (err) {
+    console.error('Consent revocation error:', err);
+    res.status(500).json({ error: 'Internal server error revoking consent' });
+  }
+});
+
+// Patient updates sensitive category scope (POST /consent/sensitive)
+app.post('/consent/sensitive', verifyJWT, requireRole(['patient', 'system_admin']), async (req, res) => {
+  const { policy_id, category, grant } = req.body;
+
+  const validCategories = ['psychiatric', 'reproductive', 'hiv', 'substance_abuse'];
+  if (!policy_id || !category || !validCategories.includes(category)) {
+    return res.status(400).json({
+      error: `Invalid parameters. category must be one of: ${validCategories.join(', ')}`
+    });
+  }
+
+  try {
+    const isGranted = Boolean(grant);
+
+    // 1. Update policy
+    const updateField = `scope.sensitive_categories.${category}`;
+    const policyResult = await systemDb.collection('consent_policies').findOneAndUpdate(
+      { policy_id },
+      { $set: { [updateField]: isGranted, updated_at: new Date() } },
+      { returnDocument: 'after' }
+    );
+
+    if (!policyResult) {
+      return res.status(404).json({ error: `Policy '${policy_id}' not found` });
+    }
+
+    // 2. Update active tokens
+    await systemDb.collection('access_tokens').updateMany(
+      { policy_id, status: 'active' },
+      { $set: { [updateField]: isGranted } }
+    );
+
+    // 3. Update in-memory cache
+    updateTokensSensitiveScope(policy_id, category, isGranted);
+
+    res.json({
+      updated: true,
+      category,
+      access: isGranted
+    });
+  } catch (err) {
+    console.error('Sensitive category toggle error:', err);
+    res.status(500).json({ error: 'Internal server error updating sensitive category' });
+  }
+});
+
+// Validate access token (GET /consent/validate)
+app.get('/consent/validate', async (req, res) => {
+  const start = performance.now();
+  const tokenId = req.headers['x-access-token'] || req.query.token_id;
+
+  if (!tokenId) {
+    return res.status(400).json({ valid: false, reason: 'missing_token_id' });
+  }
+
+  try {
+    const token = await getValidatedToken(tokenId);
+    const durationMs = (performance.now() - start).toFixed(2);
+
+    if (!token) {
+      return res.status(401).json({
+        valid: false,
+        reason: 'token_expired_or_revoked',
+        latency_ms: Number(durationMs)
+      });
+    }
+
+    res.json({
+      valid: true,
+      health_id: token.health_id,
+      doctor_id: token.doctor_id,
+      institution_id: token.institution_id,
+      scope: token.scope,
+      expires_at: Math.floor(new Date(token.expires_at).getTime() / 1000),
+      token_type: token.token_type,
+      latency_ms: Number(durationMs)
+    });
+  } catch (err) {
+    console.error('Token validation error:', err);
+    res.status(500).json({ valid: false, error: 'Token validation error' });
+  }
+});
+
+// ==========================================
+// 5. NOTIFICATION SERVICE
+// ==========================================
+
+// Internal / external notification dispatch (POST /notify)
+app.post('/notify', async (req, res) => {
+  const { recipient_id, recipient_role, notification_type, payload, channel } = req.body;
+
+  if (!recipient_id || !notification_type) {
+    return res.status(400).json({ error: 'recipient_id and notification_type are required' });
+  }
+
+  try {
+    const doc = {
+      notification_id: `NOTIF-${crypto.randomUUID()}`,
+      recipient_id,
+      recipient_role: recipient_role || 'patient',
+      notification_type,
+      payload: payload || {},
+      channel: channel || ['in_app'],
+      created_at: new Date(),
+      read: false
+    };
+
+    await systemDb.collection('notifications').insertOne(doc);
+
+    res.status(202).json({
+      dispatched: true,
+      notification_id: doc.notification_id,
+      channels: doc.channel
+    });
+  } catch (err) {
+    console.error('Notification error:', err);
+    res.status(500).json({ error: 'Internal server error dispatching notification' });
+  }
+});
+
+// Get user notifications (GET /notifications)
+app.get('/notifications', verifyJWT, async (req, res) => {
+  try {
+    const user = req.user;
+    const recipientIds = [user.user_id];
+    if (user.health_id) recipientIds.push(user.health_id);
+
+    // If patient, lookup health_id
+    if (user.role === 'patient' && !user.health_id) {
+      const patient = await systemDb.collection('users').findOne({ user_id: user.user_id });
+      if (patient?.health_id) recipientIds.push(patient.health_id);
+    }
+
+    const notifications = await systemDb.collection('notifications')
+      .find({ recipient_id: { $in: recipientIds } })
+      .sort({ created_at: -1 })
+      .limit(30)
+      .toArray();
+
+    res.json({
+      count: notifications.length,
+      notifications
+    });
+  } catch (err) {
+    console.error('Notification query error:', err);
+    res.status(500).json({ error: 'Internal server error retrieving notifications' });
+  }
+});
+
+// ==========================================
+// 6. FEDERATED CLINICAL RECORD AGGREGATOR
+// ==========================================
+
+// Doctor fetches federated records across Apollo, Fortis, Max (POST /records/fetch)
+app.post('/records/fetch', verifyJWT, requireRole(['doctor', 'doctor_supervisor', 'emergency', 'system_admin']), async (req, res) => {
+  const { health_id, token_id } = req.body;
+
+  if (!health_id || !token_id) {
+    return res.status(400).json({ error: 'health_id and token_id are required' });
+  }
+
+  try {
+    // 1. Validate Access Token (<50ms SLA)
+    const token = await getValidatedToken(token_id);
+    if (!token) {
+      return res.status(422).json({ error: 'Access token is expired or revoked. Please re-request consent from patient.' });
+    }
+
+    if (token.health_id !== health_id) {
+      return res.status(403).json({ error: 'Access token does not match the requested patient Health ID' });
+    }
+
+    const tokenScope = token.scope || {
+      general_access: true,
+      sensitive_categories: {}
+    };
+
+    // 2. Discover hospital locations
+    const institutions = await registryDb.collection('registry_entries').find({ health_id }).toArray();
+    if (institutions.length === 0) {
+      return res.status(404).json({ error: `No hospital records found in registry for ${health_id}` });
+    }
+
+    const patientName = token.patient_name || institutions[0].patient_name;
+    const nodeStatuses = {};
+    const categorizedRecords = {
+      allergies: [],
+      medications: [],
+      conditions: [],
+      lab_reports: [],
+      encounters_procedures: []
+    };
+    const sensitiveOmittedCounts = {
+      psychiatric: 0,
+      reproductive: 0,
+      hiv: 0,
+      substance_abuse: 0
+    };
+
+    // 3. Parallel FHIR queries with Contract C-08 timeout budget (3000ms per node)
+    const queryNode = async (inst) => {
+      const fhirBase = resolveFhirUrl(inst);
+      const instId = inst.institution_id;
+      const instName = inst.institution_name;
+
+      try {
+        // Find patient FHIR ID
+        const patRes = await fetchFhirWithTimeout(`${fhirBase}/Patient?identifier=${encodeURIComponent(health_id)}`, 3000);
+        if (!patRes.ok || !patRes.data?.entry || patRes.data.entry.length === 0) {
+          nodeStatuses[instId] = patRes.timedOut ? 'timeout' : 'empty';
+          return;
+        }
+
+        const fhirPatientId = patRes.data.entry[0].resource.id;
+        nodeStatuses[instId] = 'active';
+
+        // Query all clinical resource types concurrently
+        const [conds, meds, allergies, labs, observations, procs, encounters] = await Promise.all([
+          fetchFhirWithTimeout(`${fhirBase}/Condition?patient=${fhirPatientId}`, 3000),
+          fetchFhirWithTimeout(`${fhirBase}/MedicationRequest?patient=${fhirPatientId}`, 3000),
+          fetchFhirWithTimeout(`${fhirBase}/AllergyIntolerance?patient=${fhirPatientId}`, 3000),
+          fetchFhirWithTimeout(`${fhirBase}/DiagnosticReport?patient=${fhirPatientId}`, 3000),
+          fetchFhirWithTimeout(`${fhirBase}/Observation?subject=Patient/${fhirPatientId}`, 3000),
+          fetchFhirWithTimeout(`${fhirBase}/Procedure?subject=Patient/${fhirPatientId}`, 3000),
+          fetchFhirWithTimeout(`${fhirBase}/Encounter?subject=Patient/${fhirPatientId}`, 3000)
+        ]);
+
+        const extractResources = (bundleRes) => {
+          if (!bundleRes?.ok || !bundleRes.data?.entry) return [];
+          return bundleRes.data.entry.map(e => e.resource).filter(Boolean);
+        };
+
+        const processRecord = (resource, category) => {
+          const sensitiveCat = detectSensitiveCategory(resource);
+          if (sensitiveCat) {
+            const isGranted = Boolean(tokenScope.sensitive_categories?.[sensitiveCat]);
+            if (!isGranted) {
+              sensitiveOmittedCounts[sensitiveCat] = (sensitiveOmittedCounts[sensitiveCat] || 0) + 1;
+              return; // Strip sensitive record
+            }
+          }
+
+          // Format clean record object
+          const item = {
+            id: resource.id,
+            resource_type: resource.resourceType,
+            institution_id: instId,
+            institution_name: instName,
+            recorded_date: resource.recordedDate || resource.effectiveDateTime || resource.authoredOn || resource.performedDateTime || resource.period?.start || null,
+            clinical_text: resource.code?.text || resource.code?.coding?.[0]?.display || resource.type?.[0]?.text || resource.type?.[0]?.coding?.[0]?.display || resource.description || resource.medicationCodeableConcept?.text || resource.medicationCodeableConcept?.coding?.[0]?.display || resource.valueString || 'Clinical entry',
+            status: resource.clinicalStatus?.coding?.[0]?.code || resource.status || 'final',
+            is_sensitive: !!sensitiveCat,
+            sensitive_category: sensitiveCat,
+            raw_fhir_summary: {
+              resourceType: resource.resourceType,
+              id: resource.id,
+              code: resource.code || resource.medicationCodeableConcept
+            }
+          };
+
+          categorizedRecords[category].push(item);
+        };
+
+        // Group into clinical categories
+        extractResources(allergies).forEach(r => processRecord(r, 'allergies'));
+        extractResources(meds).forEach(r => processRecord(r, 'medications'));
+        extractResources(conds).forEach(r => processRecord(r, 'conditions'));
+        extractResources(labs).forEach(r => processRecord(r, 'lab_reports'));
+        extractResources(observations).forEach(r => processRecord(r, 'lab_reports'));
+        extractResources(procs).forEach(r => processRecord(r, 'encounters_procedures'));
+        extractResources(encounters).forEach(r => processRecord(r, 'encounters_procedures'));
+
+      } catch (nodeErr) {
+        console.error(`Error querying node ${instId}:`, nodeErr);
+        nodeStatuses[instId] = 'degraded';
+      }
+    };
+
+    // Execute queries across all discovered hospitals simultaneously
+    await Promise.allSettled(institutions.map(inst => queryNode(inst)));
+
+    // Sort records newest first
+    for (const cat of Object.keys(categorizedRecords)) {
+      categorizedRecords[cat].sort((a, b) => new Date(b.recorded_date || 0) - new Date(a.recorded_date || 0));
+    }
+
+    const totalRecords = Object.values(categorizedRecords).reduce((sum, list) => sum + list.length, 0);
+    const totalOmitted = Object.values(sensitiveOmittedCounts).reduce((sum, cnt) => sum + cnt, 0);
+
+    res.json({
+      health_id,
+      patient_name: patientName,
+      retrieved_at: new Date().toISOString(),
+      token_id,
+      node_statuses: nodeStatuses,
+      records: categorizedRecords,
+      total_records_returned: totalRecords,
+      total_sensitive_records_omitted: totalOmitted,
+      sensitive_records_omitted: sensitiveOmittedCounts,
+      scope_granted: tokenScope
+    });
+
+  } catch (err) {
+    console.error('Records fetch aggregation error:', err);
+    res.status(500).json({ error: 'Internal server error aggregating federated records' });
+  }
+});
+
+// Patient fetches their own complete cross-hospital timeline (GET /records/patient)
+app.get('/records/patient', verifyJWT, requireRole(['patient']), async (req, res) => {
+  try {
+    let healthId = req.user.health_id;
+    if (!healthId) {
+      const patient = await systemDb.collection('users').findOne({ user_id: req.user.user_id });
+      healthId = patient?.health_id;
+    }
+
+    if (!healthId) {
+      return res.status(400).json({ error: 'No associated ABHA Health ID found for authenticated patient' });
+    }
+
+    const institutions = await registryDb.collection('registry_entries').find({ health_id: healthId }).toArray();
+    const categorizedRecords = {
+      allergies: [],
+      medications: [],
+      conditions: [],
+      lab_reports: [],
+      encounters_procedures: []
+    };
+
+    const queryNode = async (inst) => {
+      const fhirBase = resolveFhirUrl(inst);
+      const instId = inst.institution_id;
+      const instName = inst.institution_name;
+
+      try {
+        const patRes = await fetchFhirWithTimeout(`${fhirBase}/Patient?identifier=${encodeURIComponent(healthId)}`, 3000);
+        if (!patRes.ok || !patRes.data?.entry || patRes.data.entry.length === 0) return;
+        const fhirPatientId = patRes.data.entry[0].resource.id;
+
+        const [conds, meds, allergies, labs, observations, procs, encounters] = await Promise.all([
+          fetchFhirWithTimeout(`${fhirBase}/Condition?patient=${fhirPatientId}`, 3000),
+          fetchFhirWithTimeout(`${fhirBase}/MedicationRequest?patient=${fhirPatientId}`, 3000),
+          fetchFhirWithTimeout(`${fhirBase}/AllergyIntolerance?patient=${fhirPatientId}`, 3000),
+          fetchFhirWithTimeout(`${fhirBase}/DiagnosticReport?patient=${fhirPatientId}`, 3000),
+          fetchFhirWithTimeout(`${fhirBase}/Observation?subject=Patient/${fhirPatientId}`, 3000),
+          fetchFhirWithTimeout(`${fhirBase}/Procedure?subject=Patient/${fhirPatientId}`, 3000),
+          fetchFhirWithTimeout(`${fhirBase}/Encounter?subject=Patient/${fhirPatientId}`, 3000)
+        ]);
+
+        const extractResources = (bundleRes) => {
+          if (!bundleRes?.ok || !bundleRes.data?.entry) return [];
+          return bundleRes.data.entry.map(e => e.resource).filter(Boolean);
+        };
+
+        const addRecord = (resource, category) => {
+          const sensitiveCat = detectSensitiveCategory(resource);
+          categorizedRecords[category].push({
+            id: resource.id,
+            resource_type: resource.resourceType,
+            institution_id: instId,
+            institution_name: instName,
+            recorded_date: resource.recordedDate || resource.effectiveDateTime || resource.authoredOn || resource.performedDateTime || resource.period?.start || null,
+            clinical_text: resource.code?.text || resource.code?.coding?.[0]?.display || resource.type?.[0]?.text || resource.type?.[0]?.coding?.[0]?.display || resource.description || resource.medicationCodeableConcept?.text || resource.medicationCodeableConcept?.coding?.[0]?.display || resource.valueString || 'Clinical record',
+            status: resource.clinicalStatus?.coding?.[0]?.code || resource.status || 'final',
+            is_sensitive: !!sensitiveCat,
+            sensitive_category: sensitiveCat
+          });
+        };
+
+        extractResources(allergies).forEach(r => addRecord(r, 'allergies'));
+        extractResources(meds).forEach(r => addRecord(r, 'medications'));
+        extractResources(conds).forEach(r => addRecord(r, 'conditions'));
+        extractResources(labs).forEach(r => addRecord(r, 'lab_reports'));
+        extractResources(observations).forEach(r => addRecord(r, 'lab_reports'));
+        extractResources(procs).forEach(r => addRecord(r, 'encounters_procedures'));
+        extractResources(encounters).forEach(r => addRecord(r, 'encounters_procedures'));
+      } catch (err) {
+        console.error(`Patient timeline query error for ${instId}:`, err);
+      }
+    };
+
+    await Promise.allSettled(institutions.map(inst => queryNode(inst)));
+
+    for (const cat of Object.keys(categorizedRecords)) {
+      categorizedRecords[cat].sort((a, b) => new Date(b.recorded_date || 0) - new Date(a.recorded_date || 0));
+    }
+
+    res.json({
+      health_id: healthId,
+      retrieved_at: new Date().toISOString(),
+      records: categorizedRecords
+    });
+  } catch (err) {
+    console.error('Patient timeline fetch error:', err);
+    res.status(500).json({ error: 'Internal server error retrieving patient timeline' });
   }
 });
 

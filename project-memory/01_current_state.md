@@ -20,10 +20,13 @@
 | **Identity Service (Auth / JWT)** | 🟢 Spec-Compliant | `backend/index.js` | Contract `C-01` verified, role lifetimes, `/auth/refresh`, registration endpoints active. |
 | **Doctor Portal (Frontend)** | 🟢 Working Prototype | `frontend/index.html`, `dashboard.html` | Login redirect, ABHA discovery query & card layout verified. |
 | **Patient Seed Data Spec** | 🟢 Production-Ready | `06_patient_seed_data_spec.md` | Fully specified 6 Indian patients, doctor roster, sensitive gates & schemas. |
-| **Consent Service** | ⚪ Not Started | Spec: `docs/05` | Planned for Phase 2 (Weeks 4–6) |
+| **Consent Service** | 🟢 Spec-Compliant | `backend/index.js` | MongoDB `consent_policies` & `access_tokens`, C-02 <50ms cache, grant/revoke/sensitive active. |
+| **Federated Record Aggregator** | 🟢 Spec-Compliant | `POST /records/fetch` | Parallel FHIR cross-node queries across Apollo/Fortis/Max (C-08 SLA), sensitive category privacy gates. |
+| **Patient Browser App (Workaround)** | 🟢 Working Prototype | `frontend/patient.html` | Centered mobile phone mockup, inbox, approval sheet, active consents, instant revoke, self-timeline. |
+| **Doctor Portal (Frontend)** | 🟢 Phase 2 Enhanced | `frontend/dashboard.html` | Access request modal, mandatory purpose declaration, live token status timer, clinical record viewer. |
 | **Blockchain Audit Log** | ⚪ Not Started | Spec: `docs/02` | Contract written; Hardhat/Ganache deployment planned for Phase 3 |
 | **ML Anomaly Detection** | ⚪ Not Started | Spec: `docs/04` | FastAPI scoring service planned for Phase 4 |
-| **Patient Mobile App** | ⚪ Not Started | Spec: `docs/00` | Flutter shell planned for Phase 2 / 3 |
+| **Patient Mobile App (Native Flutter)** | ⚪ Deferred (Workaround Active) | `patient_app/` | Browser mobile mockup active in `patient.html`; Flutter app build scheduled after demo. |
 
 ---
 
@@ -49,25 +52,24 @@
   - Added full Master Doctor & Practitioner Directory across FHIR and MongoDB.
   - Formalized sensitive data access architecture (multi-gate consent, FHIR security labels, break-glass lockdown invariant).
   - Specified clinical coding (SNOMED-CT, LOINC, RxNorm, CVX) and transaction bundle schemas for teammate handoff.
-
 - [x] **Indian Cohort Seeding & End-to-End Verification**:
-  - Teammate implemented `scripts/seed_indian_patients.js` following `06_patient_seed_data_spec.md`.
+  - Implemented `scripts/seed_indian_patients.js` following `06_patient_seed_data_spec.md`.
   - All 6 Indian patients and 12 practitioners seeded into FHIR nodes (ports 8081, 8082, 8083).
   - 10 registry entries indexed in `registry_db.registry_entries`, with sensitive categories correctly flagged.
-  - Safe harbor emergency contacts and critical allergies stored in local hospital Mongo collections.
-  - Created automated verification suite `scripts/test_indian_patients.js` (45/45 tests passing across FHIR, Mongo, Gateway, RBAC).
-  - Maintained regression suite `scripts/test_phase1_jwt.js` (33/33 tests passing).
-  - Enhanced `frontend/dashboard.html` to display sensitive category badges (`🔒 SENSITIVE CATEGORY (Sensitive Category — Locked)`) and Indian cohort quick-selection chips.
-  - Added npm script shortcuts: `npm run seed:patients`, `npm run test:patients`, `npm run test:phase1`.
-
-- [x] **Phase 2 Architecture & Team Work Distribution**:
-  - Established two-developer decoupled workflow (Mobile App vs Backend/Portal).
-  - Selected local single-laptop execution mode with Android/iOS loopback and USB reverse adb support.
-  - Authored comprehensive developer guide for Mobile App: `PHASE2_PATIENT_APP_GUIDE.md`.
-  - Authored comprehensive developer guide for Backend & Portal: `PHASE2_BACKEND_GUIDE.md`.
+  - Automated verification suite `scripts/test_indian_patients.js` (45/45 tests passing across FHIR, Mongo, Gateway, RBAC).
+- [x] **Phase 2 Implementation (Core Access Control, Consent Service & Federated Aggregator)**:
+  - Designed and indexed MongoDB collections `system_db.consent_policies`, `system_db.access_tokens`, and `system_db.notifications`.
+  - Implemented in-memory token cache achieving `<50ms` validation latency SLA (Contract `C-02` p95 SLA, tested at ~2ms).
+  - Implemented Consent Service endpoints: `POST /consent/request`, `GET /consent/pending`, `GET /consent/active`, `POST /consent/grant`, `POST /consent/deny`, `POST /consent/revoke`, `POST /consent/sensitive`, `GET /consent/validate`.
+  - Implemented Federated Record Aggregator (`POST /records/fetch`) querying Apollo (`:8081`), Fortis (`:8082`), and Max (`:8083`) in parallel with 3000ms timeout budget (Contract `C-08`).
+  - Implemented granular multi-gate sensitive filtering stripping psychiatric (`PSY`), reproductive (`SEX`), and substance abuse (`ETH`) records unless specifically authorized by patient.
+  - Implemented Patient Self-Timeline endpoint (`GET /records/patient`) for cross-hospital records viewing.
+  - Created automated Phase 2 test suite `scripts/test_phase2_consent.js` (48/48 tests passing).
+  - Enhanced Doctor Portal (`frontend/dashboard.html`) with access request modal, live token timer, and clinical record viewer.
+  - Built Browser-based Patient App workaround (`frontend/patient.html`) featuring a smartphone mockup frame, instant inbox polling, granular approval sheet, dynamic sensitive category toggles, and instant revocation.
 
 ### 🔧 In Progress
-- [ ] Phase 2 Implementation (Core Access Control & Consent Service in `backend/index.js`, Flutter patient app in `patient_app/`).
+- [ ] Phase 3 Planning: Blockchain Audit Log deployment (Ganache/Hardhat, smart contract audit hash chaining C-04/C-05).
 
 ### ⛔ Blocked / Critical Attention
 - None.
@@ -75,7 +77,8 @@
 ---
 
 ## 🎯 Next Tasks for Coding Agent
-1. **Phase 2 Implementation**:
-   - Design MongoDB schemas for `consent_policies` and `access_tokens` in `system_db` per `docs/01_database_schema.md`.
-   - Implement Consent Service endpoints per `docs/05_api_service_design.md` (`POST /consent/create`, `POST /consent/verify`, `POST /consent/sensitive`).
+1. **Phase 3 Blockchain Audit Service**:
+   - Set up local Ethereum/Hardhat node.
+   - Compile and deploy `AuditLog.sol` per `docs/02_smart_contract.md`.
+   - Wire Audit Service in `backend/index.js` to log access events with canonical JSON serialization (`C-05`).
 
