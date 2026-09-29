@@ -512,19 +512,131 @@
     .record-row {
       padding: 12px 16px;
       border-bottom: 1px solid #222222;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .record-row:hover {
+      background: #141414;
+    }
+    .record-row:last-child {
+      border-bottom: none;
+    }
+
+    .record-row-summary {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
       gap: 14px;
-    }
-    .record-row:last-child {
-      border-bottom: none;
+      width: 100%;
     }
 
     .record-desc {
       font-size: 12px;
       color: #FFFFFF;
       line-height: 1.4;
+    }
+
+    .expand-indicator {
+      font-size: 9px;
+      color: #737373;
+      transition: transform 0.2s ease;
+      display: inline-block;
+    }
+    .record-row.open .expand-indicator {
+      transform: rotate(180deg);
+      color: #38BDF8;
+    }
+
+    .record-quick-finding {
+      font-size: 11px;
+      color: #93C5FD;
+      margin-top: 4px;
+    }
+
+    .record-detail-drawer {
+      display: none;
+      background: #0D1117;
+      border: 1px solid #1E293B;
+      border-left: 3px solid #38BDF8;
+      padding: 14px 16px;
+      margin-top: 10px;
+      cursor: default;
+    }
+    .record-row.open .record-detail-drawer {
+      display: block;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .detail-item-full {
+      grid-column: 1 / -1;
+      background: #111827;
+      border: 1px solid #1F2937;
+      padding: 10px 12px;
+    }
+    .detail-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748B;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    .detail-val-highlight {
+      font-size: 13px;
+      color: #F8FAFC;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+    .detail-val {
+      font-size: 12px;
+      color: #CBD5E1;
+      font-family: monospace;
+    }
+    .code-pill {
+      background: #1E293B;
+      color: #38BDF8;
+      border: 1px solid #0284C7;
+      padding: 1px 5px;
+      font-size: 9px;
+      margin-right: 4px;
+    }
+    .status-pill-green {
+      background: #064E3B;
+      color: #34D399;
+      padding: 2px 6px;
+      font-size: 9px;
+      font-weight: 700;
+    }
+    .btn-inspect-fhir, .btn-copy-fhir {
+      background: #1F2937;
+      border: 1px solid #374151;
+      color: #93C5FD;
+      padding: 5px 10px;
+      font-size: 11px;
+      cursor: pointer;
+      font-family: monospace;
+      transition: background 0.15s ease;
+    }
+    .btn-inspect-fhir:hover, .btn-copy-fhir:hover {
+      background: #374151;
+      color: #FFFFFF;
+    }
+    .fhir-raw-viewer {
+      display: none;
+      background: #020617;
+      border: 1px solid #1E293B;
+      padding: 12px;
+      margin-top: 10px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #86EFAC;
+      overflow-x: auto;
+      max-height: 260px;
+      white-space: pre;
     }
 
     .record-badges {
@@ -1160,26 +1272,104 @@
         `;
       }
 
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
       function renderCategoryCard(title, icon, items) {
         if (!items || items.length === 0) return '';
         return `
           <div class="clinical-category-card">
             <div class="cat-header">
               <span>${icon} ${title}</span>
-              <span>${items.length} Recorded</span>
+              <span style="font-size: 10px; color: #38BDF8; font-weight: 500;">${items.length} Recorded • Click row to inspect</span>
             </div>
-            ${items.map(item => `
-              <div class="record-row">
-                <div class="record-desc">
-                  ${item.clinical_text}
-                  ${item.is_sensitive ? `<div style="margin-top: 4px;"><span class="sensitive-badge-unlocked">🔒 SENSITIVE: ${item.sensitive_category.toUpperCase()}</span></div>` : ''}
+            ${items.map((item, idx) => {
+              const uniqueRowId = `rec-${Math.random().toString(36).substr(2, 9)}`;
+              const rawJson = item.raw_resource || item.raw_fhir_summary || { resourceType: item.resource_type, id: item.id, text: item.clinical_text };
+              const jsonFormatted = JSON.stringify(rawJson, null, 2);
+
+              return `
+                <div class="record-row" id="${uniqueRowId}" onclick="toggleRecordDetail('${uniqueRowId}')">
+                  <div class="record-row-summary">
+                    <div class="record-desc">
+                      <div style="font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                        <span>${escapeHtml(item.clinical_text)}</span>
+                        <span class="expand-indicator">▼</span>
+                      </div>
+                      ${item.finding && item.finding !== item.clinical_text ? `
+                        <div class="record-quick-finding">
+                          <strong>Finding:</strong> ${escapeHtml(item.finding)}
+                        </div>
+                      ` : ''}
+                      ${item.is_sensitive ? `<div style="margin-top: 4px;"><span class="sensitive-badge-unlocked">🔒 SENSITIVE: ${item.sensitive_category.toUpperCase()}</span></div>` : ''}
+                    </div>
+                    <div class="record-badges">
+                      <span class="node-source-pill">${escapeHtml(item.institution_name || item.institution_id)}</span>
+                      <span class="date-pill">${item.recorded_date ? item.recorded_date.slice(0, 10) : '—'}</span>
+                    </div>
+                  </div>
+
+                  <!-- Expandable Detail Drawer -->
+                  <div class="record-detail-drawer" onclick="event.stopPropagation()">
+                    <div class="detail-grid">
+                      ${item.finding ? `
+                        <div class="detail-item-full">
+                          <div class="detail-label">📋 Diagnostic Finding / Clinical Conclusion</div>
+                          <div class="detail-val-highlight">${escapeHtml(item.finding)}</div>
+                        </div>
+                      ` : ''}
+
+                      <div class="detail-item">
+                        <div class="detail-label">👨‍⚕️ Attending Clinician / Doctor</div>
+                        <div class="detail-val">${escapeHtml(item.doctor_name || 'Hospital Attending / Staff')}</div>
+                      </div>
+
+                      <div class="detail-item">
+                        <div class="detail-label">🏷️ Standard Clinical Coding</div>
+                        <div class="detail-val">
+                          ${item.code_system ? `<span class="code-pill">${escapeHtml(item.code_system)}</span>` : ''}
+                          <span>${escapeHtml(item.code_value || '—')}</span>
+                          ${item.code_display ? `<span style="color:#8C8C8C;"> (${escapeHtml(item.code_display)})</span>` : ''}
+                        </div>
+                      </div>
+
+                      <div class="detail-item">
+                        <div class="detail-label">📊 Verification / Status</div>
+                        <div class="detail-val"><span class="status-pill-green">${escapeHtml((item.status || 'FINAL').toUpperCase())}</span></div>
+                      </div>
+
+                      <div class="detail-item">
+                        <div class="detail-label">🏥 Hospital Node</div>
+                        <div class="detail-val">${escapeHtml(item.institution_name || item.institution_id)} (${escapeHtml(item.institution_id)})</div>
+                      </div>
+
+                      <div class="detail-item">
+                        <div class="detail-label">📅 Clinical Date / Time</div>
+                        <div class="detail-val">${escapeHtml(item.recorded_date || '—')}</div>
+                      </div>
+
+                      <div class="detail-item">
+                        <div class="detail-label">🆔 FHIR Resource Reference</div>
+                        <div class="detail-val">${escapeHtml(item.resource_type || 'Resource')}/${escapeHtml(item.id)}</div>
+                      </div>
+                    </div>
+
+                    <div style="margin-top: 14px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #1E293B; padding-top: 10px;">
+                      <button type="button" class="btn-inspect-fhir" onclick="toggleFhirJson('${uniqueRowId}')">
+                        🔍 Toggle Raw FHIR R4 JSON
+                      </button>
+                      <button type="button" class="btn-copy-fhir" onclick="copyFhirJson('${uniqueRowId}', this)">
+                        📋 Copy FHIR JSON
+                      </button>
+                    </div>
+
+                    <pre class="fhir-raw-viewer" id="fhir-${uniqueRowId}">${escapeHtml(jsonFormatted)}</pre>
+                  </div>
                 </div>
-                <div class="record-badges">
-                  <span class="node-source-pill">${item.institution_name || item.institution_id}</span>
-                  <span class="date-pill">${item.recorded_date ? item.recorded_date.slice(0, 10) : '—'}</span>
-                </div>
-              </div>
-            `).join('')}
+              `;
+            }).join('')}
           </div>
         `;
       }
@@ -1205,6 +1395,31 @@
           ${renderCategoryCard('Procedures & Encounters', '🏥', records.encounters_procedures)}
         </div>
       `;
+    }
+
+    function toggleRecordDetail(rowId) {
+      const el = document.getElementById(rowId);
+      if (el) el.classList.toggle('open');
+    }
+
+    function toggleFhirJson(rowId) {
+      const viewer = document.getElementById('fhir-' + rowId);
+      if (viewer) {
+        viewer.style.display = (viewer.style.display === 'block') ? 'none' : 'block';
+      }
+    }
+
+    function copyFhirJson(rowId, btn) {
+      const viewer = document.getElementById('fhir-' + rowId);
+      if (viewer) {
+        navigator.clipboard.writeText(viewer.textContent).then(() => {
+          if (btn) {
+            const originalText = btn.textContent;
+            btn.textContent = '✓ Copied!';
+            setTimeout(() => { btn.textContent = originalText; }, 2000);
+          }
+        });
+      }
     }
   </script>
 </body>

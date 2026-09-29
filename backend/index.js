@@ -243,8 +243,14 @@ async function startServer() {
       // Ensure indexes for Phase 2 Consent Service and Audit
       await systemDb.collection('consent_policies').createIndex({ health_id: 1, doctor_id: 1, status: 1 });
       await systemDb.collection('consent_policies').createIndex({ health_id: 1, status: 1 });
-      await systemDb.collection('consent_policies').createIndex({ request_id: 1 }, { unique: true, sparse: true });
-      await systemDb.collection('consent_policies').createIndex({ policy_id: 1 }, { unique: true, sparse: true });
+      try {
+        await systemDb.collection('consent_policies').dropIndex('request_id_1');
+      } catch (e) {}
+      await systemDb.collection('consent_policies').createIndex({ request_id: 1 }, { unique: true, partialFilterExpression: { request_id: { $type: 'string' } } });
+      try {
+        await systemDb.collection('consent_policies').dropIndex('policy_id_1');
+      } catch (e) {}
+      await systemDb.collection('consent_policies').createIndex({ policy_id: 1 }, { unique: true, partialFilterExpression: { policy_id: { $type: 'string' } } });
 
       await systemDb.collection('access_tokens').createIndex({ token_id: 1 }, { unique: true });
       await systemDb.collection('access_tokens').createIndex({ policy_id: 1 });
@@ -604,7 +610,6 @@ app.post('/consent/request', verifyJWT, requireRole(['doctor', 'doctor_superviso
 
     // 2. Insert pending policy
     const pendingPolicy = {
-      policy_id: null,
       request_id: requestId,
       health_id,
       patient_name: patientName,
@@ -1151,7 +1156,43 @@ app.post('/records/fetch', verifyJWT, requireRole(['doctor', 'doctor_supervisor'
             const isGranted = Boolean(tokenScope.sensitive_categories?.[sensitiveCat]);
             if (!isGranted) {
               sensitiveOmittedCounts[sensitiveCat] = (sensitiveOmittedCounts[sensitiveCat] || 0) + 1;
-              return; // Strip sensitive record
+              return null; // Strip sensitive record
+            }
+          }
+
+          // Attending doctor / performer extraction
+          const doctorName = resource.performer?.[0]?.display 
+            || resource.performer?.[0]?.actor?.display
+            || resource.recorder?.display 
+            || resource.requester?.display 
+            || resource.asserter?.display 
+            || resource.participant?.[0]?.individual?.display 
+            || resource.author?.[0]?.display
+            || null;
+
+          // Clinical finding, conclusion, or quantitative value
+          let finding = resource.conclusion 
+            || resource.valueString 
+            || (resource.valueQuantity ? `${resource.valueQuantity.value} ${resource.valueQuantity.unit || ''}`.trim() : null)
+            || resource.description
+            || (resource.note?.[0]?.text)
+            || (resource.dosageInstruction?.[0]?.text)
+            || null;
+
+          // Standard clinical coding system & code
+          const primaryCoding = (resource.code || resource.type?.[0] || resource.medicationCodeableConcept || resource.vaccineCode)?.coding?.[0] || null;
+          let codeSystem = null;
+          let codeValue = null;
+          let codeDisplay = null;
+          if (primaryCoding) {
+            codeValue = primaryCoding.code || null;
+            codeDisplay = primaryCoding.display || null;
+            if (primaryCoding.system) {
+              if (primaryCoding.system.includes('loinc')) codeSystem = 'LOINC';
+              else if (primaryCoding.system.includes('snomed')) codeSystem = 'SNOMED-CT';
+              else if (primaryCoding.system.includes('rxnorm')) codeSystem = 'RxNorm';
+              else if (primaryCoding.system.includes('cvx')) codeSystem = 'CVX';
+              else codeSystem = primaryCoding.system.split('/').pop().toUpperCase();
             }
           }
 
@@ -1164,24 +1205,53 @@ app.post('/records/fetch', verifyJWT, requireRole(['doctor', 'doctor_supervisor'
             recorded_date: resource.recordedDate || resource.effectiveDateTime || resource.authoredOn || resource.performedDateTime || resource.period?.start || null,
             clinical_text: resource.code?.text || resource.code?.coding?.[0]?.display || resource.type?.[0]?.text || resource.type?.[0]?.coding?.[0]?.display || resource.description || resource.medicationCodeableConcept?.text || resource.medicationCodeableConcept?.coding?.[0]?.display || resource.valueString || 'Clinical entry',
             status: resource.clinicalStatus?.coding?.[0]?.code || resource.status || 'final',
+            doctor_name: doctorName,
+            finding: finding,
+            code_system: codeSystem,
+            code_value: codeValue,
+            code_display: codeDisplay,
             is_sensitive: !!sensitiveCat,
             sensitive_category: sensitiveCat,
             raw_fhir_summary: {
               resourceType: resource.resourceType,
               id: resource.id,
               code: resource.code || resource.medicationCodeableConcept
-            }
+            },
+            raw_resource: resource
           };
 
           categorizedRecords[category].push(item);
+          return item;
         };
 
         // Group into clinical categories
         extractResources(allergies).forEach(r => processRecord(r, 'allergies'));
         extractResources(meds).forEach(r => processRecord(r, 'medications'));
         extractResources(conds).forEach(r => processRecord(r, 'conditions'));
-        extractResources(labs).forEach(r => processRecord(r, 'lab_reports'));
-        extractResources(observations).forEach(r => processRecord(r, 'lab_reports'));
+
+        // Process DiagnosticReports first
+        const labResources = extractResources(labs);
+        const obsResources = extractResources(observations);
+        labResources.forEach(r => processRecord(r, 'lab_reports'));
+
+        // Process Observations (deduplicate companion observations to avoid showing identical test rows)
+        obsResources.forEach(obs => {
+          const parentReport = categorizedRecords['lab_reports'].find(lr => 
+            lr.resource_type === 'DiagnosticReport' && 
+            (obs.id === `${lr.id}-observation` || (lr.recorded_date === (obs.effectiveDateTime || obs.issued) && lr.clinical_text === (obs.code?.text || obs.code?.coding?.[0]?.display)))
+          );
+          if (parentReport) {
+            if (!parentReport.finding) {
+              parentReport.finding = obs.valueString || (obs.valueQuantity ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit || ''}`.trim() : null);
+            }
+            if (!parentReport.companion_observation) {
+              parentReport.companion_observation = obs;
+            }
+          } else {
+            processRecord(obs, 'lab_reports');
+          }
+        });
+
         extractResources(procs).forEach(r => processRecord(r, 'encounters_procedures'));
         extractResources(encounters).forEach(r => processRecord(r, 'encounters_procedures'));
 
@@ -1270,7 +1340,38 @@ app.get('/records/patient', verifyJWT, requireRole(['patient']), async (req, res
 
         const addRecord = (resource, category) => {
           const sensitiveCat = detectSensitiveCategory(resource);
-          categorizedRecords[category].push({
+          const doctorName = resource.performer?.[0]?.display 
+            || resource.performer?.[0]?.actor?.display
+            || resource.recorder?.display 
+            || resource.requester?.display 
+            || resource.asserter?.display 
+            || resource.participant?.[0]?.individual?.display 
+            || resource.author?.[0]?.display
+            || null;
+
+          let finding = resource.conclusion 
+            || resource.valueString 
+            || (resource.valueQuantity ? `${resource.valueQuantity.value} ${resource.valueQuantity.unit || ''}`.trim() : null)
+            || resource.description
+            || (resource.note?.[0]?.text)
+            || (resource.dosageInstruction?.[0]?.text)
+            || null;
+
+          const primaryCoding = (resource.code || resource.type?.[0] || resource.medicationCodeableConcept || resource.vaccineCode)?.coding?.[0] || null;
+          let codeSystem = null;
+          let codeValue = null;
+          if (primaryCoding) {
+            codeValue = primaryCoding.code || null;
+            if (primaryCoding.system) {
+              if (primaryCoding.system.includes('loinc')) codeSystem = 'LOINC';
+              else if (primaryCoding.system.includes('snomed')) codeSystem = 'SNOMED-CT';
+              else if (primaryCoding.system.includes('rxnorm')) codeSystem = 'RxNorm';
+              else if (primaryCoding.system.includes('cvx')) codeSystem = 'CVX';
+              else codeSystem = primaryCoding.system.split('/').pop().toUpperCase();
+            }
+          }
+
+          const item = {
             id: resource.id,
             resource_type: resource.resourceType,
             institution_id: instId,
@@ -1278,16 +1379,38 @@ app.get('/records/patient', verifyJWT, requireRole(['patient']), async (req, res
             recorded_date: resource.recordedDate || resource.effectiveDateTime || resource.authoredOn || resource.performedDateTime || resource.period?.start || null,
             clinical_text: resource.code?.text || resource.code?.coding?.[0]?.display || resource.type?.[0]?.text || resource.type?.[0]?.coding?.[0]?.display || resource.description || resource.medicationCodeableConcept?.text || resource.medicationCodeableConcept?.coding?.[0]?.display || resource.valueString || 'Clinical record',
             status: resource.clinicalStatus?.coding?.[0]?.code || resource.status || 'final',
+            doctor_name: doctorName,
+            finding: finding,
+            code_system: codeSystem,
+            code_value: codeValue,
             is_sensitive: !!sensitiveCat,
             sensitive_category: sensitiveCat
-          });
+          };
+          categorizedRecords[category].push(item);
+          return item;
         };
 
         extractResources(allergies).forEach(r => addRecord(r, 'allergies'));
         extractResources(meds).forEach(r => addRecord(r, 'medications'));
         extractResources(conds).forEach(r => addRecord(r, 'conditions'));
-        extractResources(labs).forEach(r => addRecord(r, 'lab_reports'));
-        extractResources(observations).forEach(r => addRecord(r, 'lab_reports'));
+
+        const labResources = extractResources(labs);
+        const obsResources = extractResources(observations);
+        labResources.forEach(r => addRecord(r, 'lab_reports'));
+        obsResources.forEach(obs => {
+          const parentReport = categorizedRecords['lab_reports'].find(lr => 
+            lr.resource_type === 'DiagnosticReport' && 
+            (obs.id === `${lr.id}-observation` || (lr.recorded_date === (obs.effectiveDateTime || obs.issued) && lr.clinical_text === (obs.code?.text || obs.code?.coding?.[0]?.display)))
+          );
+          if (parentReport) {
+            if (!parentReport.finding) {
+              parentReport.finding = obs.valueString || (obs.valueQuantity ? `${obs.valueQuantity.value} ${obs.valueQuantity.unit || ''}`.trim() : null);
+            }
+          } else {
+            addRecord(obs, 'lab_reports');
+          }
+        });
+
         extractResources(procs).forEach(r => addRecord(r, 'encounters_procedures'));
         extractResources(encounters).forEach(r => addRecord(r, 'encounters_procedures'));
       } catch (err) {

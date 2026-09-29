@@ -23,7 +23,7 @@
 | **Consent Service** | 🟢 Spec-Compliant | `backend/index.js` | MongoDB `consent_policies` & `access_tokens`, C-02 <50ms cache, grant/revoke/sensitive active. |
 | **Federated Record Aggregator** | 🟢 Spec-Compliant | `POST /records/fetch` | Parallel FHIR cross-node queries across Apollo/Fortis/Max (C-08 SLA), sensitive category privacy gates. |
 | **Patient Browser App (Workaround)** | 🟢 Working Prototype | `frontend/patient.html` | Centered mobile phone mockup, inbox, approval sheet, active consents, instant revoke, self-timeline. |
-| **Doctor Portal (Frontend)** | 🟢 Phase 2 Enhanced | `frontend/dashboard.html` | Access request modal, mandatory purpose declaration, live token status timer, clinical record viewer. |
+| **Doctor Portal (Frontend)** | 🟢 Interactive Deep Viewer | `frontend/dashboard.html` | Access request modal, live token timer, clickable clinical drawer with diagnostic findings, LOINC/SNOMED codes, attending doctors, and raw FHIR R4 JSON inspection. |
 | **Blockchain Audit Log** | ⚪ Not Started | Spec: `docs/02` | Contract written; Hardhat/Ganache deployment planned for Phase 3 |
 | **ML Anomaly Detection** | ⚪ Not Started | Spec: `docs/04` | FastAPI scoring service planned for Phase 4 |
 | **Patient Mobile App (Native Flutter)** | ⚪ Deferred (Workaround Active) | `patient_app/` | Browser mobile mockup active in `patient.html`; Flutter app build scheduled after demo. |
