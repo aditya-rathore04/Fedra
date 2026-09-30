@@ -7,7 +7,8 @@
     "start": "node index.js",
     "seed:patients": "node ../scripts/seed_indian_patients.js",
     "test:patients": "node ../scripts/test_indian_patients.js",
-    "test:phase1": "node ../scripts/test_phase1_jwt.js"
+    "test:phase1": "node ../scripts/test_phase1_jwt.js",
+    "test:phase2": "node ../scripts/test_phase2_consent.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

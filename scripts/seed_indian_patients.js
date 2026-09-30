@@ -281,10 +281,9 @@ async function main() {
     console.log('\nPhase 6: Seed system users');
     const passwordHash = await bcrypt.hash('password123', 10);
     const interactiveDoctors = DOCTORS.filter(doctor => doctor.email).map(doctor => ({ user_id: doctor.id, role: doctor.id === 'DOC-EMERGENCY' ? 'emergency' : 'doctor', email: doctor.email, name: doctor.name, institution_id: doctor.hospitalId, institution_name: HOSPITALS[doctor.hospitalId].name, department: doctor.department, password_hash: passwordHash, status: 'active', created_at: new Date() }));
-    const patientUsers = PATIENTS.map((patient, index) => ({ user_id: `PAT-${String(index + 1).padStart(3, '0')}`, role: 'patient', email: `${patient.id}@test.com`, health_id: patient.healthId, name: patient.name, birth_date: patient.dob, gender: patient.gender, password_hash: passwordHash, status: 'active', created_at: new Date() }));
+    const patientUsers = PATIENTS.map((patient, index) => ({ user_id: `PAT-IND-${String(index + 1).padStart(3, '0')}`, role: 'patient', email: `${patient.id}@test.com`, health_id: patient.healthId, name: patient.name, birth_date: patient.dob, gender: patient.gender, password_hash: passwordHash, status: 'active', created_at: new Date() }));
     const guardian = { user_id: 'PAT-GUARDIAN-001', role: 'patient', email: 'kavya.pillai@test.com', name: 'Kavya Pillai', health_id: 'ABHA-1147-9903-5561', guardian_for_health_id: 'ABHA-1147-9903-5561', phone: '+91-9880367890', password_hash: passwordHash, status: 'active', created_at: new Date() };
-    for (const user of [...interactiveDoctors, guardian]) await systemDb.collection('users').updateOne({ user_id: user.user_id }, { $set: user }, { upsert: true });
-    await systemDb.collection('users').insertMany(patientUsers);
+    for (const user of [...interactiveDoctors, guardian, ...patientUsers]) await systemDb.collection('users').updateOne({ user_id: user.user_id }, { $set: user }, { upsert: true });
     console.log(`  Seeded ${interactiveDoctors.length} interactive doctors, ${patientUsers.length} patient accounts, and guardian PAT-GUARDIAN-001.`);
     console.log('\n=== Indian patient cohort seeding complete ===');
   } finally { await Promise.all(clients.map(client => client.close().catch(() => {}))); }

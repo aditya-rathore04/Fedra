@@ -43,9 +43,25 @@ A compilation of critical failure modes, non-obvious runtime behaviors, and prov
 - **Symptom:** Patient app fails to receive consent requests during local evaluation.
 - **Cause:** Google APNs / FCM push notifications require external internet egress and valid developer certificates that may not be available during offline campus evaluations.
 - **Rule:** Implement an in-app polling or WebSocket fallback banner in the Flutter app so demos function 100% reliably in offline local networks.
-
 ## 8. Docker Compose Project Name Mismatch (`has no container to start`)
 - **Symptom:** Running `docker compose start` outputs `service "<service-name>" has no container to start`.
 - **Cause:** Docker Compose defaults the project name to the current directory name (e.g. `FEDRA` vs original `fed-ehr`). Containers created under one project name are ignored by compose commands executed with another project name.
 - **Rule:** Keep `name: fed-ehr` explicitly declared at the root of `docker-compose.yml` so all compose lifecycle commands resolve the existing container instances regardless of directory name.
+
+## 9. Windows Hyper-V / WSL2 Dynamic Port Exclusion (`listen EACCES: permission denied 0.0.0.0:3000`)
+- **Symptom:** Starting Node backend fails with `Error: listen EACCES: permission denied 0.0.0.0:3000` even though port 3000 is not in use by any process.
+- **Cause:** When Windows boots with Hyper-V, WSL2, or Docker Desktop active, the Windows NAT service (`winnat`) dynamically reserves temporary blocks of TCP ports for internal container networking (viewable via `netsh int ipv4 show excludedportrange protocol=tcp`). Occasionally, the range `2984-3083` or similar falls squarely over port 3000.
+- **Mitigation:**
+  - **Quick Admin Fix (Keeps Port 3000):** Open PowerShell as Administrator and run:
+    ```powershell
+    net stop winnat
+    net start winnat
+    ```
+    This flushes the dynamic reservation blocks and frees port 3000 immediately.
+  - **Zero-Admin Alternative:** Run backend on a free port outside the exclusion block:
+    ```powershell
+    $env:PORT=3100; node index.js
+    ```
+    (Frontend dynamically matches host port via `window.location.origin`).
+
 

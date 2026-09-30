@@ -126,6 +126,86 @@ Every session must append a new entry to the bottom of this file.
   - Person B (Backend) verifies all endpoints independently using an automated Node.js test script (`scripts/test_phase2_consent.js`) before handing off to Person A.
 - **Next Task:** Implement Phase 2 Consent Service schemas and endpoints in `backend/index.js`, or begin scaffolding `patient_app/`.
 
+---
+
+### 2026-09-15 · Session 6 · Aditya & Antigravity Agent
+- **Goal:** Deliver Phase 2 Access Control & Consent Service, Federated Record Aggregator, Doctor Portal updates, and browser-based Patient App workaround on laptop.
+- **Task:** Implement MongoDB schemas (`consent_policies`, `access_tokens`, `notifications`), sub-50ms token cache (`C-02`), parallel FHIR aggregator (`C-08`), sensitive category privacy filters (`PSY`, `SEX`, `ETH`), Doctor Portal access request modal & records viewer, browser-based Patient App (`frontend/patient.html`), and automated verification test suite.
+- **Done:**
+  - Implemented `system_db.consent_policies`, `access_tokens`, and `notifications` collections with unique/TTL indexes.
+  - Built in-memory token cache achieving Contract `C-02` latency SLA (<50ms, benchmarked at ~2ms).
+  - Implemented Consent Service endpoints: `POST /consent/request`, `GET /consent/pending`, `GET /consent/active`, `POST /consent/grant`, `POST /consent/deny`, `POST /consent/revoke`, `POST /consent/sensitive`, `GET /consent/validate`.
+  - Implemented Federated Record Aggregator (`POST /records/fetch`) executing parallel queries across Apollo (`:8081`), Fortis (`:8082`), and Max (`:8083`) with 3000ms timeout budget (Contract `C-08`).
+  - Enforced multi-gate privacy filters stripping psychiatric (`PSY`), reproductive (`SEX`), and substance abuse (`ETH`) records unless authorized in token scope.
+  - Implemented Patient Self-Timeline endpoint (`GET /records/patient`) for patient cross-hospital record view.
+  - Enabled static asset serving from Express gateway for `index.html`, `dashboard.html`, and `patient.html`.
+  - Built Browser-based Patient App (`frontend/patient.html`) featuring a smartphone mockup frame, instant inbox polling, granular approval sheet, dynamic sensitive category toggles, and instant revocation.
+  - Enhanced Doctor Portal (`frontend/dashboard.html`) with access request modal, mandatory purpose declaration, live token status countdown, and unified clinical records viewer.
+  - Built automated Phase 2 test suite `scripts/test_phase2_consent.js` (48/48 tests passing).
+  - Maintained 100% pass rate across regression suites: `npm run test:patients` (45/45) and `npm run test:phase1` (33/33). Total 126/126 tests passing.
+- **Deviations:** Adopted a browser-based smartphone mockup (`frontend/patient.html`) on the laptop as an interactive workaround for the patient mobile app per user requirement to expedite end-to-end evaluation.
+- **Decisions Made:**
+  - Added 1-click login chips for Indian cohort patients (Lakshmi, Ananya, Vikram, Saraswathi) in the patient web app for seamless live presentation.
+  - Integrated 3-second live auto-polling between the Doctor Portal and Patient App for instantaneous consent handshake feedback on a single laptop.
+- **Bugs Found & Resolved:**
+  - Resolved `user_id` namespace overlap between Synthea sample patient AdhiRaj and Indian cohort Patient 1 (Lakshmi) by assigning distinct `PAT-IND-xxx` identifiers.
+  - Resolved Encounter/Procedure clinical text extraction by checking `resource.type[0].text` in addition to `code.text`.
+- **Next Task:** Proceed with Phase 3 planning and implementation (Blockchain Audit Service with Hardhat/Ganache and smart contract hash chaining).
+
+---
+
+### 2026-09-29 · Session 7 · Aditya & Antigravity Agent
+- **Goal:** Clinical Record Deep-Inspection & UI Interactivity Enhancement.
+- **Task:** Address doctor clinical workflow requirements for laboratory panels and clinical studies. Diagnose duplicate lab test rows, extract rich findings/values/attending doctors from FHIR resources, and make records interactive and clickable in Doctor Portal.
+- **Done:**
+  - Diagnosed why laboratory panels appeared unclickable: the prototype frontend rendered a flat summary table without an expansion drawer or click handler.
+  - Diagnosed duplicate test listings: FHIR `DiagnosticReport` and companion `Observation` were both pushed into `lab_reports`; implemented companion observation deduplication and enrichment in `backend/index.js` so each panel appears once with enriched values.
+  - Resolved MongoDB unique index conflict on `consent_policies.policy_id` by adding `partialFilterExpression: { policy_id: { $type: 'string' } }` and omitting `policy_id: null` on pending requests.
+  - Enriched `POST /records/fetch` and `GET /records/patient` with:
+    - Diagnostic findings, quantitative values & reference ranges (`item.finding`).
+    - Attending physician / performer (`item.doctor_name`).
+    - Standard coding system and codes (`LOINC`, `SNOMED-CT`, `RxNorm`, `CVX`).
+    - Record verification status (`FINAL`, `ACTIVE`).
+    - Complete raw FHIR R4 JSON resource payload (`item.raw_resource`).
+  - Enhanced Doctor Portal (`frontend/dashboard.html`):
+    - Made all clinical record rows interactive & clickable with hover transitions and rotate expand indicators.
+    - Added accordion detail drawer displaying clinical findings, attending doctor, coding pills, hospital nodes, and timestamps.
+    - Added interactive **"🔍 Toggle Raw FHIR R4 JSON"** viewer and **"📋 Copy FHIR JSON"** button for auditing authentic FHIR resources.
+  - All test suites verified and passing 100%:
+    - `npm run test:phase2`: 48/48 PASS
+    - `npm run test:patients`: 45/45 PASS
+- **Deviations:** None.
+- **Decisions Made:**
+  - Retain raw FHIR R4 resource in gateway payload to empower clinicians and auditors to inspect authentic underlying HL7 FHIR standards without exposing sensitive filtered categories.
+- **Bugs Found & Resolved:**
+  - Duplicate key error on `system_db.consent_policies.policy_id_1` when multiple pending requests were created with `null` policy_id; resolved using partialFilterExpression.
+- **Next Task:** Ready for end-to-end interactive demo or Phase 3 Blockchain Audit deployment.
+
+---
+
+### 2026-09-30 · Session 8 · Aditya & Antigravity Agent
+- **Goal:** Indian Patient Cohort Synchronization & Fast Login Coverage.
+- **Task:** Correct patient identity mismatch (Ananya Reddy vs Ananya Sen, Vikram Shetty vs Vikram Malhotra, Saraswathi Nair vs Saraswathi Raman), expand fast login chips to all 6 cohort patients, and ensure resilient email/ABHA authentication in both the Patient App and Doctor Portal.
+- **Done:**
+  - Resolved patient identity confusions across frontend and spec:
+    - Patient 4 is **Ananya Reddy** (`ABHA-3390-6621-7845`, email `ananya-reddy@test.com`) with sensitive reproductive health records (Dr. Ananya Sen is the oncologist clinician `DOC-ONC-01`).
+    - Patient 5 is **Vikram Shetty** (`ABHA-6604-8817-2239`, email `vikram-shetty@test.com`) with sensitive substance abuse / rehab records.
+    - Patient 3 is **Saraswathi Nair** (`ABHA-5528-1193-4402`, email `saraswathi-nair@test.com`) with cardiology stent records.
+  - Enhanced Gateway Identity Service (`backend/index.js`):
+    - Added flexible alias mapping in `POST /auth/login` to accept hyphenated emails, dotted emails, common demo aliases, and raw ABHA Health IDs directly.
+  - Enhanced Patient Web App (`frontend/patient.html`):
+    - Expanded fast login buttons from 4 to **all 6 Indian cohort patients** (Lakshmi Venkatesh, Krishnamurthy Rao, Saraswathi Nair, Ananya Reddy, Vikram Shetty, and Anika Pillai via guardian Kavya Pillai).
+  - Enhanced Doctor Portal (`frontend/dashboard.html`):
+    - Expanded quick suggestion chips to include all 6 Indian patients with full clinical summaries and hospital tags.
+  - Verification & Health:
+    - 13/13 patient login variants tested and passing via automated verification.
+    - Full regression test run: `npm run test:phase2` (48/48 PASS), `npm run test:patients` (45/45 PASS), `npm run test:phase1` (33/33 PASS) — Total 126/126 passing.
+- **Deviations:** None.
+- **Bugs Found & Resolved:**
+  - Fast login chips in `frontend/patient.html` previously referenced non-existent accounts (`ananya.sen@test.com`, `vikram.malhotra@test.com`, `saraswathi.raman@test.com`). Corrected to spec identities with alias fallback.
+- **Next Task:** Proceed with Phase 3 Blockchain Audit deployment or live evaluation.
+
+
 
 
 

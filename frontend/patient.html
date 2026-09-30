@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FEDRA — ABHA Patient Consent & Health App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    body {
+      background: #0D0D0D;
+      color: #F5F5F5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px 10px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Outer Presentation Bar */
+    .laptop-bar {
+      width: 100%;
+      max-width: 440px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 11px;
+      color: #737373;
+    }
+
+    .laptop-bar a {
+      color: #38BDF8;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .laptop-bar a:hover {
+      text-decoration: underline;
+    }
+
+    /* Smartphone Device Frame */
+    .phone-mockup {
+      width: 100%;
+      max-width: 420px;
+      height: 840px;
+      background: #161616;
+      border: 3px solid #2E2E2E;
+      border-radius: 44px;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.9), 0 0 0 1px #1F1F1F;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Dynamic Island / Notch Bar */
+    .phone-top-notch {
+      height: 38px;
+      background: #161616;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 24px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #A3A3A3;
+      user-select: none;
+      z-index: 10;
+    }
+
+    .island-pill {
+      width: 90px;
+      height: 20px;
+      background: #000000;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      color: #10B981;
+      gap: 4px;
+    }
+
+    .pulse-dot {
+      width: 5px;
+      height: 5px;
+      background: #10B981;
+      border-radius: 50%;
+      box-shadow: 0 0 6px #10B981;
+    }
+
+    /* App Scrollable Content Area */
+    .app-screen {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 16px 18px 70px 18px;
+      position: relative;
+    }
+
+    /* Custom Scrollbar */
+    .app-screen::-webkit-scrollbar {
+      width: 4px;
+    }
+    .app-screen::-webkit-scrollbar-thumb {
+      background: #333333;
+    }
+
+    /* Bottom Navigation Bar */
+    .bottom-nav {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 60px;
+      background: rgba(22, 22, 22, 0.95);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid #262626;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      z-index: 20;
+    }
+
+    .nav-tab {
+      background: transparent;
+      border: none;
+      color: #737373;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      position: relative;
+      padding: 8px 14px;
+      transition: color 0.15s ease;
+    }
+
+    .nav-tab.active {
+      color: #FFFFFF;
+    }
+
+    .nav-badge {
+      position: absolute;
+      top: 2px;
+      right: 8px;
+      background: #EF4444;
+      color: #FFFFFF;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 10px;
+    }
+
+    /* Patient Header Card */
+    .patient-card {
+      background: #1F1F1F;
+      border: 1px solid #2E2E2E;
+      padding: 16px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .patient-name {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .patient-meta {
+      font-size: 10px;
+      color: #A3A3A3;
+      margin-top: 4px;
+    }
+
+    .patient-abha-pill {
+      display: inline-block;
+      background: #111111;
+      border: 1px solid #333333;
+      color: #38BDF8;
+      font-size: 10px;
+      padding: 2px 6px;
+      margin-top: 6px;
+    }
+
+    .btn-logout-small {
+      background: transparent;
+      border: 1px solid #383838;
+      color: #A3A3A3;
+      padding: 4px 8px;
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-logout-small:hover {
+      border-color: #F87171;
+      color: #F87171;
+    }
+
+    /* Sections */
+    .section-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #737373;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Request Cards */
+    .request-card {
+      background: #1C1C1C;
+      border: 1px solid #2E2E2E;
+      padding: 16px;
+      margin-bottom: 14px;
+      position: relative;
+    }
+
+    .request-card.urgent {
+      border-left: 3px solid #F59E0B;
+    }
+
+    .req-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+
+    .req-doc-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #FFFFFF;
+    }
+
+    .req-hospital {
+      font-size: 11px;
+      color: #38BDF8;
+      margin-top: 2px;
+    }
+
+    .req-tag {
+      font-size: 9px;
+      background: #F59E0B;
+      color: #000000;
+      padding: 2px 6px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .req-purpose-box {
+      background: #141414;
+      border: 1px solid #262626;
+      padding: 10px 12px;
+      font-size: 11px;
+      color: #D4D4D4;
+      line-height: 1.4;
+      margin-bottom: 14px;
+    }
+
+    .req-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .btn-approve {
+      background: #FFFFFF;
+      color: #000000;
+      border: 1px solid #FFFFFF;
+      padding: 9px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.1s ease;
+    }
+    .btn-approve:hover {
+      background: #E5E5E5;
+    }
+
+    .btn-deny {
+      background: transparent;
+      color: #EF4444;
+      border: 1px solid #EF4444;
+      padding: 9px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.1s ease;
+    }
+    .btn-deny:hover {
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    /* Modal / Bottom Sheet for Consent Scope */
+    .modal-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(4px);
+      display: none;
+      flex-direction: column;
+      justify-content: flex-end;
+      z-index: 50;
+    }
+
+    .modal-content {
+      background: #1A1A1A;
+      border-top: 1px solid #333333;
+      padding: 20px 18px 28px 18px;
+      max-height: 90%;
+      overflow-y: auto;
+    }
+
+    .modal-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .modal-subtitle {
+      font-size: 11px;
+      color: #8C8C8C;
+      margin-bottom: 16px;
+    }
+
+    .gate-group {
+      background: #141414;
+      border: 1px solid #292929;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+
+    .gate-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #222222;
+    }
+    .gate-item:last-child {
+      border-bottom: none;
+      padding-bottom: 2px;
+    }
+
+    .gate-info {
+      flex: 1;
+      padding-right: 12px;
+    }
+
+    .gate-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: #FFFFFF;
+    }
+
+    .gate-desc {
+      font-size: 10px;
+      color: #737373;
+      margin-top: 2px;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #333333;
+      transition: .2s;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .2s;
+    }
+    input:checked + .slider {
+      background-color: #10B981;
+    }
+    input:checked + .slider:before {
+      transform: translateX(16px);
+    }
+
+    .btn-confirm-grant {
+      width: 100%;
+      background: #10B981;
+      color: #000000;
+      border: none;
+      padding: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      cursor: pointer;
+      margin-top: 14px;
+    }
+    .btn-confirm-grant:hover {
+      background: #34D399;
+    }
+
+    .btn-cancel-modal {
+      width: 100%;
+      background: transparent;
+      color: #8C8C8C;
+      border: 1px solid #333333;
+      padding: 10px;
+      font-size: 11px;
+      text-transform: uppercase;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+
+    /* Active Policy Card */
+    .active-card {
+      background: #1C1C1C;
+      border: 1px solid #2E2E2E;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+
+    .active-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .status-badge-active {
+      font-size: 9px;
+      background: #064E3B;
+      color: #34D399;
+      border: 1px solid #059669;
+      padding: 2px 6px;
+      font-weight: 700;
+    }
+
+    .scope-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 10px 0;
+    }
+
+    .scope-pill {
+      font-size: 9px;
+      padding: 3px 6px;
+      border: 1px solid #333333;
+      background: #141414;
+      color: #A3A3A3;
+    }
+    .scope-pill.enabled {
+      border-color: #059669;
+      color: #34D399;
+      background: rgba(5, 150, 105, 0.1);
+    }
+    .scope-pill.locked {
+      border-color: #DC2626;
+      color: #F87171;
+      background: rgba(220, 38, 38, 0.1);
+    }
+
+    .btn-revoke {
+      width: 100%;
+      background: transparent;
+      color: #F87171;
+      border: 1px solid #F87171;
+      padding: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: all 0.1s;
+    }
+    .btn-revoke:hover {
+      background: #F87171;
+      color: #000000;
+    }
+
+    /* Clinical Records Item */
+    .record-card {
+      background: #1A1A1A;
+      border: 1px solid #2E2E2E;
+      padding: 12px;
+      margin-bottom: 8px;
+    }
+
+    .record-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .record-hosp-pill {
+      font-size: 9px;
+      color: #38BDF8;
+      background: #0C4A6E;
+      padding: 1px 5px;
+    }
+
+    .record-date {
+      font-size: 9px;
+      color: #737373;
+    }
+
+    .record-text {
+      font-size: 11px;
+      color: #FFFFFF;
+      line-height: 1.4;
+    }
+
+    .record-tag-sensitive {
+      font-size: 9px;
+      color: #F87171;
+      border: 1px solid #7F1D1D;
+      background: #450A0A;
+      padding: 1px 4px;
+      display: inline-block;
+      margin-top: 6px;
+    }
+
+    /* Auth Screen Form */
+    .login-box {
+      padding: 24px 8px;
+    }
+
+    .chip-demo {
+      background: #212121;
+      border: 1px solid #333333;
+      color: #A3A3A3;
+      padding: 8px 10px;
+      font-size: 10px;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      margin-bottom: 6px;
+    }
+    .chip-demo:hover {
+      border-color: #38BDF8;
+      color: #FFFFFF;
+      background: #1C2B3A;
+    }
+
+    .input-box {
+      width: 100%;
+      background: #111111;
+      border: 1px solid #333333;
+      color: #FFFFFF;
+      padding: 10px;
+      font-size: 12px;
+      margin-bottom: 12px;
+      outline: none;
+    }
+    .input-box:focus {
+      border-color: #38BDF8;
+    }
+
+    .btn-login {
+      width: 100%;
+      background: #38BDF8;
+      color: #000000;
+      border: none;
+      padding: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 10px;
+      color: #737373;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="laptop-bar">
+    <span>FEDRA Patient App (Browser Prototype)</span>
+    <a href="dashboard.html" target="_blank">Switch to Doctor Portal &rarr;</a>
+  </div>
+
+  <div class="phone-mockup">
+    <!-- Notch / Dynamic Island -->
+    <div class="phone-top-notch">
+      <span id="phoneClock">09:41</span>
+      <div class="island-pill">
+        <span class="pulse-dot"></span>
+        <span>ABHA LIVE</span>
+      </div>
+      <span>5G 98%</span>
+    </div>
+
+    <!-- Login View (Shown when unauthenticated) -->
+    <div id="viewLogin" class="app-screen" style="display: none;">
+      <div class="login-box">
+        <div style="font-size: 10px; color: #737373; text-transform: uppercase; margin-bottom: 4px;">ABHA Secure Vault</div>
+        <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">Patient Access</h2>
+        <p style="font-size: 11px; color: #8C8C8C; line-height: 1.5; margin-bottom: 20px;">
+          Authorize doctors to query your medical records across Apollo, Fortis, and Max hospitals.
+        </p>
+
+        <div style="font-size: 10px; color: #737373; margin-bottom: 8px;">FAST LOGIN (ALL 6 INDIAN COHORT PATIENTS):</div>
+        <button type="button" class="chip-demo" onclick="fillPatient('lakshmi-venkatesh@test.com', 'ABHA-4471-2298-6613')">
+          <strong>1. Lakshmi Venkatesh</strong> (Apollo • 🔒 Sensitive: Psych)
+        </button>
+        <button type="button" class="chip-demo" onclick="fillPatient('krishnamurthy-rao@test.com', 'ABHA-7712-4456-9081')">
+          <strong>2. Krishnamurthy Rao</strong> (Fortis & Apollo • Geriatric Chronic Care)
+        </button>
+        <button type="button" class="chip-demo" onclick="fillPatient('saraswathi-nair@test.com', 'ABHA-5528-1193-4402')">
+          <strong>3. Saraswathi Nair</strong> (Apollo & Max • Cardiology Angina/Stent)
+        </button>
+        <button type="button" class="chip-demo" onclick="fillPatient('ananya-reddy@test.com', 'ABHA-3390-6621-7845')">
+          <strong>4. Ananya Reddy</strong> (Fortis & Apollo • 🔒 Sensitive: Repro)
+        </button>
+        <button type="button" class="chip-demo" onclick="fillPatient('vikram-shetty@test.com', 'ABHA-6604-8817-2239')">
+          <strong>5. Vikram Shetty</strong> (Max & Apollo • 🔒 Sensitive: Substance)
+        </button>
+        <button type="button" class="chip-demo" onclick="fillPatient('kavya.pillai@test.com', 'ABHA-1147-9903-5561')">
+          <strong>6. Anika Pillai (Guardian: Kavya)</strong> (Fortis • Minor UIP Schedule)
+        </button>
+
+        <form onsubmit="handlePatientLogin(event)" style="margin-top: 16px;">
+          <input id="loginInput" class="input-box" type="text" placeholder="Email or ABHA Health ID" required />
+          <input id="passwordInput" class="input-box" type="password" value="password123" placeholder="Password" required />
+          <button type="submit" id="loginBtn" class="btn-login">Unlock Patient Vault &rarr;</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Main Authenticated App Screen -->
+    <div id="viewMain" class="app-screen" style="display: none;">
+      <!-- Patient Header -->
+      <div class="patient-card">
+        <div>
+          <div id="patientName" class="patient-name">—</div>
+          <div id="patientMeta" class="patient-meta">—</div>
+          <div id="patientAbha" class="patient-abha-pill">ABHA-XXXX-XXXX-XXXX</div>
+        </div>
+        <button class="btn-logout-small" onclick="handlePatientLogout()">Lock</button>
+      </div>
+
+      <!-- TAB 1: INBOX (Consent Requests) -->
+      <div id="tabInbox">
+        <div class="section-title">
+          <span>Incoming Requests</span>
+          <span id="pendingCountBadge" style="color: #F59E0B; font-weight: 700;">0 Pending</span>
+        </div>
+        <div id="inboxList">
+          <div class="empty-state">No pending access requests.<br>When a doctor requests your records, it will appear here in real-time.</div>
+        </div>
+      </div>
+
+      <!-- TAB 2: ACTIVE POLICIES -->
+      <div id="tabActive" style="display: none;">
+        <div class="section-title">
+          <span>Active Doctor Authorizations</span>
+          <span id="activeCountBadge" style="color: #34D399;">0 Active</span>
+        </div>
+        <div id="activeList">
+          <div class="empty-state">No active doctor authorizations.</div>
+        </div>
+      </div>
+
+      <!-- TAB 3: HEALTH TIMELINE -->
+      <div id="tabRecords" style="display: none;">
+        <div class="section-title">
+          <span>My Health Timeline</span>
+          <span id="recordsTotalBadge" style="color: #38BDF8;">—</span>
+        </div>
+        <div id="timelineContainer">
+          <div class="empty-state">Loading clinical records...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Navigation Tabs -->
+    <div id="bottomNav" class="bottom-nav" style="display: none;">
+      <button class="nav-tab active" onclick="switchTab('inbox')">
+        <span>📥</span>
+        <span>Inbox</span>
+        <span id="tabBadge" class="nav-badge" style="display: none;">0</span>
+      </button>
+      <button class="nav-tab" onclick="switchTab('active')">
+        <span>🛡️</span>
+        <span>Consents</span>
+      </button>
+      <button class="nav-tab" onclick="switchTab('records')">
+        <span>📋</span>
+        <span>Timeline</span>
+      </button>
+    </div>
+
+    <!-- Multi-Gate Consent Approval Bottom Sheet / Modal -->
+    <div id="consentModal" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-title">Authorize Medical Access</div>
+        <div id="modalDoctorInfo" class="modal-subtitle">Dr. Arjun Nair • Apollo Memorial Hospital</div>
+
+        <div style="font-size: 10px; color: #737373; text-transform: uppercase; margin-bottom: 4px;">Declared Purpose</div>
+        <div id="modalPurpose" class="req-purpose-box">Post-surgical follow up consultation</div>
+
+        <div style="font-size: 10px; color: #737373; text-transform: uppercase; margin-bottom: 8px;">Multi-Gate Permission Scope</div>
+        <div class="gate-group">
+          <div class="gate-item">
+            <div class="gate-info">
+              <div class="gate-name">General Medical Records</div>
+              <div class="gate-desc">Diagnoses, active medications, routine lab results</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="gateGeneral" checked disabled />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="gate-item">
+            <div class="gate-info">
+              <div class="gate-name">🧠 Psychiatric & Mental Health</div>
+              <div class="gate-desc">Counseling notes, psychotherapy, anti-depressants</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="gatePsych" />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="gate-item">
+            <div class="gate-info">
+              <div class="gate-name">🩺 Reproductive & Sexual Health</div>
+              <div class="gate-desc">Contraception, fertility, reproductive procedures</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="gateRepro" />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="gate-item">
+            <div class="gate-info">
+              <div class="gate-name">🍷 Substance Abuse & Rehab</div>
+              <div class="gate-desc">Addiction medicine, recovery liver panels</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="gateSubstance" />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="gate-item">
+            <div class="gate-info">
+              <div class="gate-name">🔬 HIV & Infectious Disease</div>
+              <div class="gate-desc">Confidential viral panels and antiviral regimens</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="gateHiv" />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <button type="button" class="btn-confirm-grant" onclick="submitConsentGrant()">Confirm & Grant 8h Access</button>
+        <button type="button" class="btn-cancel-modal" onclick="closeConsentModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = (window.location.protocol === 'http:' || window.location.protocol === 'https:') && window.location.port === '3000'
+      ? window.location.origin
+      : 'http://localhost:3000';
+    let currentPatient = null;
+    let activeRequestId = null;
+    let pollTimer = null;
+
+    // Clock updater
+    function updateClock() {
+      const now = new Date();
+      const hrs = String(now.getHours()).padStart(2, '0');
+      const mins = String(now.getMinutes()).padStart(2, '0');
+      document.getElementById('phoneClock').textContent = `${hrs}:${mins}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Check existing patient session
+    const savedToken = sessionStorage.getItem('fed_patient_token');
+    const savedUser = sessionStorage.getItem('fed_patient_user');
+
+    if (savedToken && savedUser) {
+      currentPatient = JSON.parse(savedUser);
+      currentPatient.token = savedToken;
+      showMainView();
+    } else {
+      showLoginView();
+    }
+
+    function fillPatient(email, abha) {
+      document.getElementById('loginInput').value = email;
+      document.getElementById('passwordInput').value = 'password123';
+    }
+
+    async function handlePatientLogin(e) {
+      e.preventDefault();
+      const input = document.getElementById('loginInput').value.trim();
+      const password = document.getElementById('passwordInput').value;
+      const btn = document.getElementById('loginBtn');
+
+      btn.disabled = true;
+      btn.textContent = 'Verifying...';
+
+      try {
+        const res = await fetch(`${API_BASE}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: input, password: password })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Authentication failed');
+
+        currentPatient = {
+          token: data.token,
+          user_id: data.user_id,
+          name: data.name,
+          health_id: data.health_id,
+          gender: data.gender,
+          birth_date: data.birth_date
+        };
+
+        sessionStorage.setItem('fed_patient_token', data.token);
+        sessionStorage.setItem('fed_patient_user', JSON.stringify(currentPatient));
+
+        showMainView();
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Unlock Patient Vault →';
+      }
+    }
+
+    function handlePatientLogout() {
+      if (pollTimer) clearInterval(pollTimer);
+      sessionStorage.removeItem('fed_patient_token');
+      sessionStorage.removeItem('fed_patient_user');
+      currentPatient = null;
+      showLoginView();
+    }
+
+    function showLoginView() {
+      document.getElementById('viewLogin').style.display = 'block';
+      document.getElementById('viewMain').style.display = 'none';
+      document.getElementById('bottomNav').style.display = 'none';
+    }
+
+    function showMainView() {
+      document.getElementById('viewLogin').style.display = 'none';
+      document.getElementById('viewMain').style.display = 'block';
+      document.getElementById('bottomNav').style.display = 'flex';
+
+      document.getElementById('patientName').textContent = currentPatient.name || 'Patient';
+      document.getElementById('patientAbha').textContent = currentPatient.health_id || 'ABHA Registered';
+      const birth = currentPatient.birth_date ? `DOB: ${currentPatient.birth_date.slice(0, 10)}` : '';
+      const gen = currentPatient.gender ? ` • ${currentPatient.gender}` : '';
+      document.getElementById('patientMeta').textContent = `${birth}${gen}`;
+
+      switchTab('inbox');
+      fetchPendingRequests();
+      fetchActiveConsents();
+
+      // Start live auto-polling every 3 seconds for instant handshake
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(() => {
+        fetchPendingRequests(true);
+        fetchActiveConsents(true);
+      }, 3000);
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.nav-tab').forEach((el, idx) => {
+        el.classList.toggle('active', (tab === 'inbox' && idx === 0) || (tab === 'active' && idx === 1) || (tab === 'records' && idx === 2));
+      });
+
+      document.getElementById('tabInbox').style.display = (tab === 'inbox') ? 'block' : 'none';
+      document.getElementById('tabActive').style.display = (tab === 'active') ? 'block' : 'none';
+      document.getElementById('tabRecords').style.display = (tab === 'records') ? 'block' : 'none';
+
+      if (tab === 'records') {
+        fetchPatientTimeline();
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Pending Requests Flow
+    // -------------------------------------------------------------
+    let pendingRequestsCache = [];
+
+    async function fetchPendingRequests(silent = false) {
+      if (!currentPatient?.token) return;
+      try {
+        const res = await fetch(`${API_BASE}/consent/pending?health_id=${encodeURIComponent(currentPatient.health_id)}`, {
+          headers: { 'Authorization': `Bearer ${currentPatient.token}` }
+        });
+        if (res.status === 401) {
+          handlePatientLogout();
+          return;
+        }
+        const data = await res.json();
+        pendingRequestsCache = data.requests || [];
+        renderPendingRequests();
+      } catch (err) {
+        if (!silent) console.error('Error fetching pending requests:', err);
+      }
+    }
+
+    function renderPendingRequests() {
+      const container = document.getElementById('inboxList');
+      const badge = document.getElementById('tabBadge');
+      const count = pendingRequestsCache.length;
+
+      document.getElementById('pendingCountBadge').textContent = `${count} Pending`;
+      if (count > 0) {
+        badge.style.display = 'block';
+        badge.textContent = count;
+      } else {
+        badge.style.display = 'none';
+      }
+
+      if (count === 0) {
+        container.innerHTML = `<div class="empty-state">No pending access requests.<br>When a doctor requests your records, it will appear here in real-time.</div>`;
+        return;
+      }
+
+      container.innerHTML = pendingRequestsCache.map(req => `
+        <div class="request-card urgent">
+          <div class="req-header">
+            <div>
+              <div class="req-doc-name">${req.doctor_name || 'Medical Practitioner'}</div>
+              <div class="req-hospital">🏥 ${req.institution_name || 'Hospital Node'}</div>
+            </div>
+            <span class="req-tag">New Request</span>
+          </div>
+          <div class="req-purpose-box">
+            <strong>Clinical Purpose:</strong><br>${req.purpose}
+          </div>
+          <div class="req-actions">
+            <button class="btn-approve" onclick="openConsentModal('${req.request_id}')">Review & Grant</button>
+            <button class="btn-deny" onclick="denyRequest('${req.request_id}')">Decline</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openConsentModal(requestId) {
+      activeRequestId = requestId;
+      const req = pendingRequestsCache.find(r => r.request_id === requestId);
+      if (req) {
+        document.getElementById('modalDoctorInfo').textContent = `${req.doctor_name} • ${req.institution_name}`;
+        document.getElementById('modalPurpose').textContent = req.purpose;
+      }
+      document.getElementById('consentModal').style.display = 'flex';
+    }
+
+    function closeConsentModal() {
+      document.getElementById('consentModal').style.display = 'none';
+      activeRequestId = null;
+    }
+
+    async function submitConsentGrant() {
+      if (!activeRequestId || !currentPatient?.token) return;
+
+      const scope = {
+        general_access: true,
+        sensitive_categories: {
+          psychiatric: document.getElementById('gatePsych').checked,
+          reproductive: document.getElementById('gateRepro').checked,
+          substance_abuse: document.getElementById('gateSubstance').checked,
+          hiv: document.getElementById('gateHiv').checked
+        }
+      };
+
+      try {
+        const res = await fetch(`${API_BASE}/consent/grant`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentPatient.token}`
+          },
+          body: JSON.stringify({ request_id: activeRequestId, scope })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to grant consent');
+
+        closeConsentModal();
+        fetchPendingRequests();
+        fetchActiveConsents();
+        switchTab('active');
+      } catch (err) {
+        alert('Grant error: ' + err.message);
+      }
+    }
+
+    async function denyRequest(requestId) {
+      if (!confirm('Are you sure you want to decline this doctor access request?')) return;
+      try {
+        const res = await fetch(`${API_BASE}/consent/deny`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentPatient.token}`
+          },
+          body: JSON.stringify({ request_id: requestId })
+        });
+        fetchPendingRequests();
+      } catch (err) {
+        alert('Deny error: ' + err.message);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Active Consents Flow
+    // -------------------------------------------------------------
+    let activePoliciesCache = [];
+
+    async function fetchActiveConsents(silent = false) {
+      if (!currentPatient?.token) return;
+      try {
+        const res = await fetch(`${API_BASE}/consent/active`, {
+          headers: { 'Authorization': `Bearer ${currentPatient.token}` }
+        });
+        const data = await res.json();
+        activePoliciesCache = data.policies || [];
+        renderActiveConsents();
+      } catch (err) {
+        if (!silent) console.error('Error fetching active consents:', err);
+      }
+    }
+
+    function renderActiveConsents() {
+      const container = document.getElementById('activeList');
+      const count = activePoliciesCache.length;
+      document.getElementById('activeCountBadge').textContent = `${count} Active`;
+
+      if (count === 0) {
+        container.innerHTML = `<div class="empty-state">No active doctor authorizations.</div>`;
+        return;
+      }
+
+      container.innerHTML = activePoliciesCache.map(p => {
+        const sens = p.scope?.sensitive_categories || {};
+        return `
+          <div class="active-card">
+            <div class="active-header">
+              <div>
+                <strong style="font-size: 13px;">${p.doctor_name || 'Practitioner'}</strong>
+                <div style="font-size: 10px; color: #8C8C8C;">${p.institution_name || 'Hospital'}</div>
+              </div>
+              <span class="status-badge-active">ACTIVE • 8H</span>
+            </div>
+
+            <div style="font-size: 10px; color: #737373; margin-top: 4px;">
+              Purpose: ${p.purpose}
+            </div>
+
+            <div class="scope-badges">
+              <span class="scope-pill enabled">General Access: ON</span>
+              <span class="scope-pill ${sens.psychiatric ? 'enabled' : 'locked'}" onclick="toggleSensitiveCategory('${p.policy_id}', 'psychiatric', ${!sens.psychiatric})" style="cursor: pointer;">
+                🧠 Psych: ${sens.psychiatric ? 'OPEN' : 'LOCKED'}
+              </span>
+              <span class="scope-pill ${sens.reproductive ? 'enabled' : 'locked'}" onclick="toggleSensitiveCategory('${p.policy_id}', 'reproductive', ${!sens.reproductive})" style="cursor: pointer;">
+                🩺 Repro: ${sens.reproductive ? 'OPEN' : 'LOCKED'}
+              </span>
+              <span class="scope-pill ${sens.substance_abuse ? 'enabled' : 'locked'}" onclick="toggleSensitiveCategory('${p.policy_id}', 'substance_abuse', ${!sens.substance_abuse})" style="cursor: pointer;">
+                🍷 Substance: ${sens.substance_abuse ? 'OPEN' : 'LOCKED'}
+              </span>
+            </div>
+
+            <button class="btn-revoke" onclick="revokePolicy('${p.policy_id}')">Revoke Access Immediately</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function toggleSensitiveCategory(policyId, category, grant) {
+      try {
+        const res = await fetch(`${API_BASE}/consent/sensitive`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentPatient.token}`
+          },
+          body: JSON.stringify({ policy_id: policyId, category, grant })
+        });
+        if (res.ok) {
+          fetchActiveConsents();
+        }
+      } catch (err) {
+        alert('Toggle error: ' + err.message);
+      }
+    }
+
+    async function revokePolicy(policyId) {
+      if (!confirm('Are you sure you want to REVOKE this doctor access immediately? All tokens will be instantly invalidated.')) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/consent/revoke`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentPatient.token}`
+          },
+          body: JSON.stringify({ policy_id: policyId })
+        });
+        fetchActiveConsents();
+      } catch (err) {
+        alert('Revoke error: ' + err.message);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Health Records Timeline Flow
+    // -------------------------------------------------------------
+    async function fetchPatientTimeline() {
+      const container = document.getElementById('timelineContainer');
+      container.innerHTML = `<div class="empty-state">Aggregating records across Apollo, Fortis, and Max...</div>`;
+
+      try {
+        const res = await fetch(`${API_BASE}/records/patient`, {
+          headers: { 'Authorization': `Bearer ${currentPatient.token}` }
+        });
+        const data = await res.json();
+
+        const allRecords = [
+          ...(data.records?.conditions || []).map(r => ({ ...r, badge: 'CONDITION' })),
+          ...(data.records?.medications || []).map(r => ({ ...r, badge: 'MEDICATION' })),
+          ...(data.records?.allergies || []).map(r => ({ ...r, badge: 'ALLERGY' })),
+          ...(data.records?.lab_reports || []).map(r => ({ ...r, badge: 'LAB / REPORT' })),
+          ...(data.records?.encounters_procedures || []).map(r => ({ ...r, badge: 'ENCOUNTER' }))
+        ];
+
+        allRecords.sort((a, b) => new Date(b.recorded_date || 0) - new Date(a.recorded_date || 0));
+        document.getElementById('recordsTotalBadge').textContent = `${allRecords.length} Records`;
+
+        if (allRecords.length === 0) {
+          container.innerHTML = `<div class="empty-state">No clinical records discovered across hospital nodes.</div>`;
+          return;
+        }
+
+        container.innerHTML = allRecords.map(r => `
+          <div class="record-card">
+            <div class="record-top">
+              <span class="record-hosp-pill">${r.institution_name || r.institution_id}</span>
+              <span class="record-date">${r.recorded_date ? r.recorded_date.slice(0, 10) : 'Recorded'}</span>
+            </div>
+            <div class="record-text">
+              <span style="font-size: 9px; color: #A3A3A3; font-weight: 700;">[${r.badge}]</span>
+              ${r.clinical_text}
+            </div>
+            ${r.is_sensitive ? `<span class="record-tag-sensitive">🔒 Protected: ${r.sensitive_category}</span>` : ''}
+          </div>
+        `).join('');
+
+      } catch (err) {
+        container.innerHTML = `<div class="empty-state" style="color: #F87171;">Failed to fetch timeline: ${err.message}</div>`;
+      }
+    }
+  </script>
+</body>
+</html>

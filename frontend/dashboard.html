@@ -60,7 +60,7 @@
     .nav-actions {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 12px;
     }
 
     .node-pill {
@@ -68,10 +68,23 @@
       color: #A3A3A3;
       border: 1px solid #2A2A2A;
       background: #1A1A1A;
-      padding: 4px 10px;
+      padding: 5px 10px;
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      text-decoration: none;
+    }
+
+    .node-pill.patient-link {
+      border-color: #0284C7;
+      color: #38BDF8;
+      font-weight: 600;
+      background: rgba(2, 132, 199, 0.1);
+      transition: all 0.15s;
+    }
+    .node-pill.patient-link:hover {
+      background: #0284C7;
+      color: #000000;
     }
 
     .status-dot {
@@ -93,7 +106,7 @@
       text-transform: uppercase;
       cursor: pointer;
       user-select: none;
-      transition: transform 0.08s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.08s ease, color 0.08s ease, border-color 0.08s ease;
+      transition: all 0.1s ease;
     }
 
     .btn-logout:hover {
@@ -103,19 +116,12 @@
       transform: translateY(-2px);
     }
 
-    .btn-logout:active {
-      background: #F87171 !important;
-      color: #000000 !important;
-      border-color: #F87171 !important;
-      transform: translateY(2px) scale(0.96) !important;
-    }
-
     /* Practitioner Welcome Banner */
     .practitioner-panel {
       background: #1A1A1A;
       border: 1px solid #2E2E2E;
-      padding: 28px 32px;
-      margin-bottom: 32px;
+      padding: 24px 28px;
+      margin-bottom: 28px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
     }
 
@@ -128,19 +134,19 @@
     }
 
     .welcome-heading {
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 700;
       letter-spacing: -0.03em;
       color: #FFFFFF;
-      margin-bottom: 18px;
+      margin-bottom: 16px;
     }
 
     .practitioner-meta-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 16px;
       border-top: 1px solid #292929;
-      padding-top: 18px;
+      padding-top: 16px;
     }
 
     .meta-item {
@@ -150,112 +156,75 @@
 
     .meta-label {
       font-size: 10px;
-      color: #737373;
       text-transform: uppercase;
       letter-spacing: 0.06em;
+      color: #737373;
       margin-bottom: 4px;
     }
 
     .meta-value {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       color: #E5E5E5;
     }
 
-    /* Search Area */
+    /* Search Section */
     .search-card {
-      background: #171717;
+      background: #1A1A1A;
       border: 1px solid #2E2E2E;
-      padding: 28px 32px;
-      margin-bottom: 32px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      padding: 24px 28px;
+      margin-bottom: 28px;
     }
 
     .search-title {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: -0.01em;
+      letter-spacing: 0.04em;
       margin-bottom: 6px;
     }
 
     .search-desc {
       font-size: 12px;
       color: #8C8C8C;
-      margin-bottom: 20px;
+      line-height: 1.5;
+      margin-bottom: 18px;
     }
 
     .search-bar-row {
       display: flex;
-      gap: 12px;
-    }
-
-    @media (max-width: 680px) {
-      .search-bar-row {
-        flex-direction: column;
-      }
+      gap: 10px;
     }
 
     .search-input {
       flex: 1;
-      background: #0F0F0F;
+      background: #111111;
       border: 1px solid #383838;
       color: #FFFFFF;
-      padding: 14px 18px;
-      font-size: 14px;
+      padding: 12px 14px;
+      font-size: 13px;
       outline: none;
-      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      transition: border-color 0.15s ease;
     }
-
     .search-input:focus {
       border-color: #FFFFFF;
-      box-shadow: 0 0 0 1px #FFFFFF;
     }
 
-    .search-input.input-error {
-      border-color: #F87171 !important;
-      box-shadow: 0 0 0 1px #F87171 !important;
-    }
-
-    /* Tactile Spring Push Button */
     .btn-search {
       background: #FFFFFF;
       color: #141414;
       border: 1px solid #FFFFFF;
-      padding: 14px 28px;
+      padding: 12px 20px;
       font-size: 12px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.04em;
       cursor: pointer;
-      white-space: nowrap;
-      user-select: none;
-      transition: transform 0.08s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.08s ease, color 0.08s ease, box-shadow 0.08s ease;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      transition: all 0.1s ease;
     }
-
     .btn-search:hover {
-      background: #F0F0F0;
-      color: #000000;
-      transform: translateY(-2px);
-      box-shadow: 0 6px 18px rgba(255, 255, 255, 0.18);
-    }
-
-    .btn-search:active {
-      background: #000000 !important;
-      color: #FFFFFF !important;
-      border-color: #FFFFFF !important;
-      transform: translateY(3px) scale(0.97) !important;
-      box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.9), 0 0 0 1px #FFFFFF !important;
-    }
-
-    .btn-search:disabled {
-      background: #2E2E2E;
-      color: #8C8C8C;
-      border-color: #383838;
-      cursor: default;
-      transform: none;
-      box-shadow: none;
+      background: #E5E5E5;
+      transform: translateY(-1px);
     }
 
     .quick-chips {
@@ -263,237 +232,527 @@
       flex-wrap: wrap;
       gap: 8px;
       margin-top: 14px;
-    }
-
-    .chip-label {
-      font-size: 11px;
-      color: #666666;
-      display: flex;
       align-items: center;
-      margin-right: 4px;
     }
-
+    .chip-label {
+      font-size: 10px;
+      color: #737373;
+      text-transform: uppercase;
+    }
     .quick-chip {
       background: #212121;
       border: 1px solid #333333;
       color: #A3A3A3;
-      padding: 5px 10px;
-      font-size: 11px;
+      padding: 5px 8px;
+      font-size: 10px;
       cursor: pointer;
-      user-select: none;
-      transition: transform 0.08s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.08s ease, color 0.08s ease, border-color 0.08s ease;
+      transition: all 0.1s;
     }
-
     .quick-chip:hover {
-      background: #2B2B2B;
+      background: #2D2D2D;
       color: #FFFFFF;
       border-color: #555555;
-      transform: translateY(-1px);
-    }
-
-    .quick-chip:active {
-      background: #000000 !important;
-      color: #FFFFFF !important;
-      border-color: #FFFFFF !important;
-      transform: translateY(2px) scale(0.96) !important;
-    }
-
-    /* Alert Boxes */
-    .alert {
-      padding: 16px 20px;
-      font-size: 12px;
-      line-height: 1.5;
-      margin-bottom: 24px;
-      display: none;
-      border: 1px solid transparent;
-    }
-
-    .alert-error {
-      background: #261414;
-      border-color: #F87171;
-      color: #FCA5A5;
-    }
-
-    .alert-error strong {
-      color: #FFFFFF;
-      display: block;
-      margin-bottom: 4px;
     }
 
     /* Results Area */
     .results-container {
-      margin-top: 8px;
+      margin-top: 20px;
     }
 
     .results-empty-state {
-      background: #171717;
+      background: #1A1A1A;
       border: 1px dashed #2E2E2E;
-      padding: 60px 24px;
+      padding: 40px;
       text-align: center;
-      color: #666666;
+      color: #737373;
     }
 
-    .results-empty-state h3 {
-      font-size: 14px;
-      font-weight: 600;
-      color: #A3A3A3;
-      margin-bottom: 6px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
+    /* Patient Discovery Header */
     .patient-header {
       background: #1F1F1F;
-      border: 1px solid #333333;
+      border: 1px solid #2E2E2E;
       padding: 20px 24px;
-      margin-bottom: 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 16px;
+      margin-bottom: 20px;
     }
 
     .patient-name-title {
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 700;
-      letter-spacing: -0.02em;
-      color: #FFFFFF;
     }
 
     .patient-id-badge {
-      font-size: 12px;
-      color: #A3A3A3;
+      font-size: 11px;
+      color: #8C8C8C;
       margin-top: 4px;
     }
-
     .patient-id-badge span {
-      color: #FFFFFF;
-      background: #2B2B2B;
-      padding: 2px 6px;
-      border: 1px solid #404040;
+      color: #38BDF8;
+      font-weight: 600;
     }
 
-    .patient-summary-badge {
-      text-align: right;
+    /* Access Consent Action Bar */
+    .consent-bar {
+      background: #181818;
+      border: 1px solid #333333;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
     }
 
-    .node-count-tag {
-      background: #10B981;
-      color: #0F172A;
+    .consent-bar-info {
+      flex: 1;
+    }
+
+    .consent-bar-title {
       font-size: 11px;
-      font-weight: 700;
-      padding: 4px 10px;
       text-transform: uppercase;
-      display: inline-block;
+      letter-spacing: 0.06em;
+      color: #8C8C8C;
       margin-bottom: 4px;
     }
 
+    .consent-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border: 1px solid #383838;
+      background: #111111;
+    }
+
+    .status-pending {
+      border-color: #F59E0B;
+      color: #FCD34D;
+      background: rgba(245, 158, 11, 0.1);
+    }
+    .status-active {
+      border-color: #10B981;
+      color: #34D399;
+      background: rgba(16, 185, 129, 0.1);
+    }
+    .status-none {
+      border-color: #4B5563;
+      color: #9CA3AF;
+    }
+
+    .btn-action-primary {
+      background: #38BDF8;
+      color: #000000;
+      border: none;
+      padding: 10px 18px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.1s;
+    }
+    .btn-action-primary:hover {
+      background: #7DD3FC;
+      transform: translateY(-1px);
+    }
+
+    .btn-action-success {
+      background: #10B981;
+      color: #000000;
+      border: none;
+      padding: 10px 18px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.1s;
+    }
+    .btn-action-success:hover {
+      background: #34D399;
+      transform: translateY(-1px);
+    }
+
+    /* Hospital Discovery Cards */
     .hospital-card {
       background: #1A1A1A;
       border: 1px solid #2E2E2E;
-      padding: 24px;
+      padding: 18px 22px;
       margin-bottom: 16px;
-      transition: border-color 0.15s ease, transform 0.15s ease;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-    }
-
-    .hospital-card:hover {
-      border-color: #555555;
     }
 
     .hosp-card-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 1px solid #262626;
-      padding-bottom: 14px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #292929;
     }
 
     .hosp-name {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
-      color: #FFFFFF;
     }
 
     .hosp-node-tag {
       font-size: 10px;
       color: #10B981;
-      border: 1px solid rgba(16, 185, 129, 0.4);
       background: rgba(16, 185, 129, 0.1);
+      border: 1px solid #059669;
       padding: 3px 8px;
-      text-transform: uppercase;
-      font-weight: 600;
     }
 
     .hosp-details-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-
-    .categories-box {
-      border-top: 1px solid #262626;
-      padding-top: 14px;
-    }
-
-    .categories-label {
-      font-size: 10px;
-      color: #737373;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 8px;
-      display: block;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
     }
 
     .category-pills {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
+      margin-top: 6px;
     }
-
     .category-pill {
       background: #242424;
       border: 1px solid #383838;
-      color: #D4D4D4;
-      font-size: 11px;
-      padding: 4px 8px;
+      color: #A3A3A3;
+      font-size: 10px;
+      padding: 3px 8px;
     }
 
     .sensitive-box {
-      border-top: 1px solid #3A1F1F;
-      background: rgba(239, 68, 68, 0.05);
-      padding: 12px 14px;
-      margin-top: 14px;
-      border-left: 2px solid #EF4444;
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: rgba(239, 68, 68, 0.08);
+      border-left: 3px solid #EF4444;
     }
-
     .sensitive-label {
       font-size: 10px;
       color: #F87171;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
       margin-bottom: 6px;
-      display: block;
-      font-weight: 600;
     }
-
     .sensitive-pills {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
     }
-
     .sensitive-pill {
       background: rgba(239, 68, 68, 0.15);
       border: 1px solid #EF4444;
       color: #FCA5A5;
-      font-size: 11px;
-      padding: 4px 10px;
+      font-size: 10px;
+      padding: 3px 8px;
       font-weight: 600;
-      letter-spacing: 0.02em;
+    }
+
+    /* Clinical Records Viewer */
+    .clinical-viewer {
+      margin-top: 28px;
+      border-top: 2px solid #2E2E2E;
+      padding-top: 24px;
+    }
+
+    .viewer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .viewer-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .viewer-meta {
+      font-size: 11px;
+      color: #8C8C8C;
+    }
+
+    .sensitive-warning-banner {
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid #F59E0B;
+      color: #FCD34D;
+      padding: 12px 16px;
+      font-size: 11px;
+      line-height: 1.5;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .clinical-category-card {
+      background: #181818;
+      border: 1px solid #2E2E2E;
+      margin-bottom: 16px;
+    }
+
+    .cat-header {
+      background: #1F1F1F;
+      border-bottom: 1px solid #2A2A2A;
+      padding: 10px 16px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .record-row {
+      padding: 12px 16px;
+      border-bottom: 1px solid #222222;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .record-row:hover {
+      background: #141414;
+    }
+    .record-row:last-child {
+      border-bottom: none;
+    }
+
+    .record-row-summary {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 14px;
+      width: 100%;
+    }
+
+    .record-desc {
+      font-size: 12px;
+      color: #FFFFFF;
+      line-height: 1.4;
+    }
+
+    .expand-indicator {
+      font-size: 9px;
+      color: #737373;
+      transition: transform 0.2s ease;
+      display: inline-block;
+    }
+    .record-row.open .expand-indicator {
+      transform: rotate(180deg);
+      color: #38BDF8;
+    }
+
+    .record-quick-finding {
+      font-size: 11px;
+      color: #93C5FD;
+      margin-top: 4px;
+    }
+
+    .record-detail-drawer {
+      display: none;
+      background: #0D1117;
+      border: 1px solid #1E293B;
+      border-left: 3px solid #38BDF8;
+      padding: 14px 16px;
+      margin-top: 10px;
+      cursor: default;
+    }
+    .record-row.open .record-detail-drawer {
+      display: block;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .detail-item-full {
+      grid-column: 1 / -1;
+      background: #111827;
+      border: 1px solid #1F2937;
+      padding: 10px 12px;
+    }
+    .detail-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748B;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    .detail-val-highlight {
+      font-size: 13px;
+      color: #F8FAFC;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+    .detail-val {
+      font-size: 12px;
+      color: #CBD5E1;
+      font-family: monospace;
+    }
+    .code-pill {
+      background: #1E293B;
+      color: #38BDF8;
+      border: 1px solid #0284C7;
+      padding: 1px 5px;
+      font-size: 9px;
+      margin-right: 4px;
+    }
+    .status-pill-green {
+      background: #064E3B;
+      color: #34D399;
+      padding: 2px 6px;
+      font-size: 9px;
+      font-weight: 700;
+    }
+    .btn-inspect-fhir, .btn-copy-fhir {
+      background: #1F2937;
+      border: 1px solid #374151;
+      color: #93C5FD;
+      padding: 5px 10px;
+      font-size: 11px;
+      cursor: pointer;
+      font-family: monospace;
+      transition: background 0.15s ease;
+    }
+    .btn-inspect-fhir:hover, .btn-copy-fhir:hover {
+      background: #374151;
+      color: #FFFFFF;
+    }
+    .fhir-raw-viewer {
+      display: none;
+      background: #020617;
+      border: 1px solid #1E293B;
+      padding: 12px;
+      margin-top: 10px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #86EFAC;
+      overflow-x: auto;
+      max-height: 260px;
+      white-space: pre;
+    }
+
+    .record-badges {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .node-source-pill {
+      font-size: 9px;
+      color: #38BDF8;
+      background: #0C4A6E;
+      border: 1px solid #0284C7;
+      padding: 2px 6px;
+    }
+
+    .date-pill {
+      font-size: 10px;
+      color: #737373;
+    }
+
+    .sensitive-badge-unlocked {
+      font-size: 9px;
+      color: #34D399;
+      background: #064E3B;
+      border: 1px solid #059669;
+      padding: 2px 6px;
+      font-weight: 700;
+    }
+
+    /* Modal dialog */
+    .modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+
+    .modal-box {
+      background: #1A1A1A;
+      border: 1px solid #383838;
+      max-width: 520px;
+      width: 100%;
+      padding: 28px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9);
+    }
+
+    .modal-h {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .modal-p {
+      font-size: 12px;
+      color: #8C8C8C;
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+
+    .purpose-select {
+      width: 100%;
+      background: #111111;
+      border: 1px solid #383838;
+      color: #FFFFFF;
+      padding: 10px;
+      font-size: 12px;
+      margin-bottom: 12px;
+      outline: none;
+    }
+
+    .purpose-textarea {
+      width: 100%;
+      height: 80px;
+      background: #111111;
+      border: 1px solid #383838;
+      color: #FFFFFF;
+      padding: 10px;
+      font-size: 12px;
+      margin-bottom: 20px;
+      outline: none;
+      resize: vertical;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .btn-cancel {
+      background: transparent;
+      border: 1px solid #383838;
+      color: #8C8C8C;
+      padding: 8px 16px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    /* Alert Box */
+    .alert {
+      padding: 12px 16px;
+      font-size: 12px;
+      line-height: 1.4;
+      margin-bottom: 20px;
+      display: none;
+    }
+    .alert-error {
+      background: #261414;
+      border: 1px solid #F87171;
+      color: #FCA5A5;
     }
 
     .footer {
@@ -517,9 +776,12 @@
     <header class="top-nav">
       <div>
         <div class="brand-title">FEDERATED HEALTH NETWORK</div>
-        <div class="brand-tag">Practitioner Clinical Portal • v1.0</div>
+        <div class="brand-tag">Practitioner Clinical Portal • Phase 2 Gateway</div>
       </div>
       <div class="nav-actions">
+        <a href="patient.html" target="_blank" class="node-pill patient-link">
+          <span>📱 Open Patient App &rarr;</span>
+        </a>
         <div class="node-pill">
           <span class="status-dot"></span>
           <span>Gateway :3000</span>
@@ -560,7 +822,7 @@
     <!-- Search Section -->
     <section class="search-card">
       <h2 class="search-title">Federated Patient Record Search</h2>
-      <p class="search-desc">Query the decentralized network index for any national patient ABHA ID to discover all hospitals holding clinical records.</p>
+      <p class="search-desc">Query the decentralized network index for any national patient ABHA ID to discover all hospitals holding clinical records and request consent.</p>
 
       <div id="searchAlert" class="alert alert-error">
         <strong id="searchAlertTitle">Query Error</strong>
@@ -573,7 +835,7 @@
             id="healthIdInput" 
             class="search-input" 
             type="text" 
-            placeholder="Enter Patient ABHA ID (e.g. ABHA-DEMO-001)" 
+            placeholder="Enter Patient ABHA ID (e.g. ABHA-4471-2298-6613)" 
             autocomplete="off" 
             spellcheck="false" 
             value=""
@@ -583,33 +845,58 @@
         </div>
 
         <div class="quick-chips">
-          <span class="chip-label">Suggestions:</span>
-          <button type="button" class="quick-chip" onclick="setQuery('ABHA-4471-2298-6613')">Lakshmi (Apollo • 🔒 Sensitive: Psych)</button>
-          <button type="button" class="quick-chip" onclick="setQuery('ABHA-7712-4456-9081')">Krishnamurthy (Fortis & Apollo)</button>
-          <button type="button" class="quick-chip" onclick="setQuery('ABHA-5528-1193-4402')">Saraswathi (Apollo & Max)</button>
-          <button type="button" class="quick-chip" onclick="setQuery('ABHA-3390-6621-7845')">Ananya (Fortis & Apollo • 🔒 Repro)</button>
-          <button type="button" class="quick-chip" onclick="setQuery('ABHA-6604-8817-2239')">Vikram (Max & Apollo • 🔒 Substance)</button>
-          <button type="button" class="quick-chip" onclick="setQuery('ABHA-1147-9903-5561')">Anika (Fortis • Infant UIP)</button>
+          <span class="chip-label">Indian Cohort:</span>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-4471-2298-6613')">1. Lakshmi Venkatesh (Apollo • 🔒 Psych)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-7712-4456-9081')">2. Krishnamurthy Rao (Fortis & Apollo • Geriatric)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-5528-1193-4402')">3. Saraswathi Nair (Apollo & Max • Cardio)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-3390-6621-7845')">4. Ananya Reddy (Fortis & Apollo • 🔒 Repro)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-6604-8817-2239')">5. Vikram Shetty (Max & Apollo • 🔒 Substance)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-1147-9903-5561')">6. Anika Pillai (Fortis • Minor UIP)</button>
         </div>
       </form>
     </section>
 
-    <!-- Results Area (Starts Empty by default) -->
+    <!-- Results & Consent Area -->
     <main id="resultsArea" class="results-container">
       <div class="results-empty-state">
         <h3>Ready For Query</h3>
-        <p style="font-size: 12px; margin-top: 4px;">Enter a Patient Health ID above (or click a suggestion) to discover medical records across all federated hospital nodes.</p>
+        <p style="font-size: 12px; margin-top: 4px;">Enter a Patient Health ID above to discover records and initiate the consent handshake.</p>
       </div>
     </main>
+  </div>
+
+  <!-- Modal: Request Clinical Access -->
+  <div id="requestModal" class="modal-backdrop">
+    <div class="modal-box">
+      <h3 class="modal-h">Declare Clinical Purpose</h3>
+      <p class="modal-p">In compliance with medical data privacy laws, state your clinical justification for requesting access to this patient's records.</p>
+
+      <label class="meta-label">Quick Purpose Template</label>
+      <select id="purposeTemplate" class="purpose-select" onchange="applyPurposeTemplate()">
+        <option value="Cardiology consultation and hemodynamic follow-up post emergency care">Cardiology consultation and hemodynamic follow-up</option>
+        <option value="Pre-operative assessment for surgical oncology clearance">Pre-operative assessment for surgical oncology clearance</option>
+        <option value="Comprehensive chronic disease management and medication reconciliation">Chronic disease management & medication reconciliation</option>
+        <option value="Custom">Other (Custom specification below)</option>
+      </select>
+
+      <label class="meta-label">Declared Clinical Justification (Mandatory)</label>
+      <textarea id="purposeText" class="purpose-textarea" required></textarea>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" onclick="closeRequestModal()">Cancel</button>
+        <button type="button" id="btnSubmitRequest" class="btn-action-primary" onclick="submitAccessRequest()">Submit Access Request &rarr;</button>
+      </div>
+    </div>
   </div>
 
   <footer class="footer">
     <div>HL7 FHIR R4 • Federated Query Gateway</div>
     <div>Zero-Centralization Architecture</div>
   </footer>
-
   <script>
-    const API_BASE = 'http://localhost:3000';
+    const API_BASE = (window.location.protocol === 'http:' || window.location.protocol === 'https:') && window.location.port === '3000'
+      ? window.location.origin
+      : 'http://localhost:3000';
 
     // Verify Session State
     const token = sessionStorage.getItem('fed_ehr_token');
@@ -621,19 +908,14 @@
 
     const user = JSON.parse(userRaw || '{}');
 
-    // Helper: Extract only Dr. [LastName] for professional display
     function getDoctorLastName(fullName) {
       if (!fullName) return 'Doctor';
-      // Strip any extra parenthetical tags like (ER)
       const clean = fullName.replace(/\s*\([^)]*\)/g, '').trim();
       const parts = clean.split(' ').filter(Boolean);
-      const lastName = parts[parts.length - 1] || 'Doctor';
-      return `Dr. ${lastName}`;
+      return `Dr. ${parts[parts.length - 1] || 'Doctor'}`;
     }
 
-    // Populate Practitioner UI
-    const doctorTitle = getDoctorLastName(user.name);
-    document.getElementById('welcomeHeading').textContent = `Welcome back, ${doctorTitle}`;
+    document.getElementById('welcomeHeading').textContent = `Welcome back, ${getDoctorLastName(user.name)}`;
     document.getElementById('docUserId').textContent = user.userId || 'DOC-DEMO';
     document.getElementById('docRole').textContent = (user.role || 'Doctor').toUpperCase();
     document.getElementById('docInstitution').textContent = user.institutionName || user.institutionId || 'Apollo Memorial Hospital';
@@ -653,8 +935,7 @@
     function setQuery(id) {
       const inputEl = document.getElementById('healthIdInput');
       inputEl.value = id;
-      inputEl.classList.remove('input-error');
-      document.getElementById('searchAlert').style.display = 'none';
+      clearSearchInputError();
       handleSearch();
     }
 
@@ -665,22 +946,22 @@
       alert.style.display = 'block';
     }
 
+    let currentDiscoveredData = null;
+    let activeToken = null;
+    let activeRequestId = null;
+    let consentPollTimer = null;
+    let countdownInterval = null;
+
     async function handleSearch(e) {
       if (e) e.preventDefault();
-      
       const inputEl = document.getElementById('healthIdInput');
       const healthId = inputEl.value.trim();
-      const alert = document.getElementById('searchAlert');
       const searchBtn = document.getElementById('searchBtn');
       const resultsArea = document.getElementById('resultsArea');
 
-      alert.style.display = 'none';
-      inputEl.classList.remove('input-error');
-
+      clearSearchInputError();
       if (!healthId) {
-        inputEl.classList.add('input-error');
-        showSearchError('Field Required', 'Please enter a Patient Health ID (e.g. ABHA-DEMO-001) to search.');
-        inputEl.focus();
+        showSearchError('Field Required', 'Please enter a Patient Health ID.');
         return;
       }
 
@@ -689,56 +970,86 @@
 
       try {
         const res = await fetch(`${API_BASE}/patient/search?health_id=${encodeURIComponent(healthId)}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+          headers: { 'Authorization': `Bearer ${token}` }
         });
-
         const data = await res.json();
 
-        if (res.status === 401 || res.status === 403) {
-          showSearchError('Session Expired', 'Your authentication token is no longer valid. Redirecting to login...');
-          setTimeout(() => handleLogout(), 2000);
+        if (res.status === 401) {
+          handleLogout();
           return;
         }
+        if (!res.ok) throw new Error(data.error || 'Failed to complete federated discovery.');
 
-        if (!res.ok) {
-          throw new Error(data.error || 'Failed to complete federated search.');
-        }
-
-        if (!data.institutions || data.institutions.length === 0) {
-          resultsArea.innerHTML = `
-            <div class="results-empty-state">
-              <h3 style="color: #F87171;">No Records Discovered</h3>
-              <p style="font-size: 12px; margin-top: 4px;">No participating hospital nodes hold clinical records for Health ID: <strong>${healthId}</strong></p>
-            </div>
-          `;
-          return;
-        }
-
+        currentDiscoveredData = data;
+        await checkActiveConsentForPatient(healthId);
         renderResults(data);
 
       } catch (err) {
-        let title = 'Discovery Error';
-        let detail = err.message;
-
-        if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-          title = 'Gateway Offline';
-          detail = 'Unable to connect to the backend server at http://localhost:3000. Ensure the backend gateway is running.';
-        }
-
-        showSearchError(title, detail);
+        showSearchError('Discovery Error', err.message);
       } finally {
         searchBtn.disabled = false;
         searchBtn.innerHTML = 'Query Registry &rarr;';
       }
     }
 
+    async function checkActiveConsentForPatient(healthId) {
+      try {
+        const res = await fetch(`${API_BASE}/consent/active`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        const matchingPolicy = (data.policies || []).find(p => p.health_id === healthId && p.active_token);
+        if (matchingPolicy) {
+          activeToken = matchingPolicy.active_token;
+          activeToken.scope = matchingPolicy.scope;
+          activeToken.policy_id = matchingPolicy.policy_id;
+        } else {
+          activeToken = null;
+        }
+      } catch (err) {
+        console.error('Error checking active consents:', err);
+      }
+    }
+
     function renderResults(data) {
       const resultsArea = document.getElementById('resultsArea');
-      const patientName = data.institutions[0]?.patient_name || 'Patient Record';
+      const patientName = data.institutions[0]?.patient_name || data.patient_name || 'Patient Record';
       const totalInstitutions = data.institutions.length;
       const totalRecords = data.institutions.reduce((acc, curr) => acc + (curr.record_summary?.total_records || 0), 0);
+
+      let consentStatusHtml = '';
+      if (activeToken) {
+        consentStatusHtml = `
+          <div class="consent-status-pill status-active">
+            <span class="status-dot"></span>
+            <span>Active Access Token (${activeToken.token_id.slice(0, 12)}...)</span>
+          </div>
+          <button class="btn-action-success" onclick="fetchFederatedRecords('${data.health_id}', '${activeToken.token_id}')">
+            ⚡ Fetch Clinical Records &rarr;
+          </button>
+          <button class="btn-cancel" style="border-color: #EF4444; color: #EF4444; font-size: 11px; padding: 7px 12px; cursor: pointer;" onclick="revokeActiveConsent('${activeToken.policy_id}', '${data.health_id}')" title="Revoke this token to re-test patient approval handshake">
+            🔄 Revoke Token (Re-test)
+          </button>
+        `;
+      } else if (activeRequestId) {
+        consentStatusHtml = `
+          <div class="consent-status-pill status-pending">
+            <span>⏳ Consent Requested • Awaiting Patient Approval</span>
+          </div>
+          <button class="btn-action-primary" onclick="checkConsentHandshake('${data.health_id}')">
+            🔄 Check Approval Status
+          </button>
+        `;
+      } else {
+        consentStatusHtml = `
+          <div class="consent-status-pill status-none">
+            <span>🔒 No Active Consent Token</span>
+          </div>
+          <button class="btn-action-primary" onclick="openRequestModal('${data.health_id}', '${patientName}')">
+            Request Record Access &rarr;
+          </button>
+        `;
+      }
 
       let html = `
         <div class="patient-header">
@@ -746,46 +1057,59 @@
             <div class="patient-name-title">${patientName}</div>
             <div class="patient-id-badge">Health ID: <span>${data.health_id}</span></div>
           </div>
-          <div class="patient-summary-badge">
-            <div class="node-count-tag">${totalInstitutions} Hospital Node(s) Located</div>
-            <div style="font-size: 11px; color: #8C8C8C;">Total ~${totalRecords} FHIR Records Indexed</div>
+          <div style="text-align: right;">
+            <div style="font-size: 12px; color: #10B981; font-weight: 700;">${totalInstitutions} Nodes Located</div>
+            <div style="font-size: 11px; color: #8C8C8C;">~${totalRecords} FHIR Records Available</div>
           </div>
         </div>
+
+        <div class="consent-bar">
+          <div class="consent-bar-info">
+            <div class="consent-bar-title">Access Control & Consent Status</div>
+            <div style="font-size: 11px; color: #A3A3A3;">Patient consent is required to decrypt and retrieve cross-hospital medical records.</div>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            ${consentStatusHtml}
+          </div>
+        </div>
+
+        <div id="clinicalViewerContainer"></div>
+
+        <div style="font-size: 11px; color: #737373; text-transform: uppercase; margin: 20px 0 10px 0;">Discovered Hospital Storage Nodes</div>
       `;
 
       data.institutions.forEach(node => {
         const categories = node.record_summary?.categories_present || [];
-        const pills = categories.map(c => `<span class="category-pill">${c}</span>`).join('') || '<span class="category-pill">general_records</span>';
+        const pills = categories.map(c => `<span class="category-pill">${c}</span>`).join('');
 
         html += `
           <div class="hospital-card">
             <div class="hosp-card-header">
               <div class="hosp-name">🏥 ${node.institution_name}</div>
-              <div class="hosp-node-tag">Node Active • ${node.institution_id}</div>
+              <div class="hosp-node-tag">Node Online • ${node.institution_id}</div>
             </div>
 
             <div class="hosp-details-grid">
               <div class="meta-item">
-                <span class="meta-label">Total Indexed Records</span>
-                <span class="meta-value">${node.record_summary?.total_records || 0} FHIR Resources</span>
+                <span class="meta-label">Indexed Records</span>
+                <span class="meta-value">${node.record_summary?.total_records || 0} Resources</span>
               </div>
               <div class="meta-item">
-                <span class="meta-label">Decentralized FHIR Endpoint</span>
-                <span class="meta-value" style="font-size: 12px; color: #A3E635;">${node.public_fhir_endpoint || node.fhir_endpoint}</span>
+                <span class="meta-label">FHIR Gateway Port</span>
+                <span class="meta-value" style="color: #38BDF8;">${node.public_fhir_endpoint || node.fhir_endpoint}</span>
               </div>
             </div>
 
             <div class="categories-box">
-              <span class="categories-label">Clinical Data Categories Available:</span>
-              <div class="category-pills">
-                ${pills}
-              </div>
+              <span class="meta-label">Available Categories:</span>
+              <div class="category-pills">${pills}</div>
             </div>
+
             ${(node.record_summary?.sensitive_categories_present || []).length > 0 ? `
               <div class="sensitive-box">
-                <span class="sensitive-label">Sensitive Clinical Data (Multi-Gate Consent Required):</span>
+                <div class="sensitive-label">🔒 Sensitive Categories (Multi-Gate Required):</div>
                 <div class="sensitive-pills">
-                  ${node.record_summary.sensitive_categories_present.map(s => `<span class="sensitive-pill">🔒 ${s.toUpperCase()} (Sensitive Category — Locked)</span>`).join('')}
+                  ${node.record_summary.sensitive_categories_present.map(s => `<span class="sensitive-pill">${s.toUpperCase()}</span>`).join('')}
                 </div>
               </div>
             ` : ''}
@@ -794,6 +1118,340 @@
       });
 
       resultsArea.innerHTML = html;
+    }
+
+    async function revokeActiveConsent(policyId, healthId) {
+      if (!confirm('Revoke this active consent token? This will reset the status to "No Active Consent" so you can test the patient approval flow again.')) return;
+      try {
+        const res = await fetch(`${API_BASE}/consent/revoke`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ policy_id: policyId })
+        });
+        if (res.ok) {
+          activeToken = null;
+          activeRequestId = null;
+          const viewer = document.getElementById('clinicalViewerContainer');
+          if (viewer) viewer.innerHTML = '';
+          await checkActiveConsentForPatient(healthId);
+          renderResults(currentDiscoveredData);
+        } else {
+          const err = await res.json();
+          alert('Revoke failed: ' + (err.error || 'Unknown error'));
+        }
+      } catch (e) {
+        alert('Error revoking consent: ' + e.message);
+      }
+    }
+
+    // Modal logic
+    function openRequestModal(healthId, patientName) {
+      applyPurposeTemplate();
+      document.getElementById('requestModal').style.display = 'flex';
+    }
+
+    function closeRequestModal() {
+      document.getElementById('requestModal').style.display = 'none';
+    }
+
+    function applyPurposeTemplate() {
+      const select = document.getElementById('purposeTemplate');
+      const text = document.getElementById('purposeText');
+      if (select.value !== 'Custom') {
+        text.value = select.value;
+      } else {
+        text.value = '';
+        text.focus();
+      }
+    }
+
+    async function submitAccessRequest() {
+      const purpose = document.getElementById('purposeText').value.trim();
+      if (!purpose) {
+        alert('Please specify your clinical purpose.');
+        return;
+      }
+
+      const btn = document.getElementById('btnSubmitRequest');
+      btn.disabled = true;
+      btn.textContent = 'Submitting Request...';
+
+      try {
+        const res = await fetch(`${API_BASE}/consent/request`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            health_id: currentDiscoveredData.health_id,
+            purpose: purpose,
+            institution_id: user.institutionId || 'HOSP-1'
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to submit request');
+
+        activeRequestId = data.request_id;
+        closeRequestModal();
+        renderResults(currentDiscoveredData);
+
+        // Auto poll for 45 seconds to see if patient grants in other tab
+        startAutoPollForConsent(currentDiscoveredData.health_id);
+
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Submit Access Request →';
+      }
+    }
+
+    function startAutoPollForConsent(healthId) {
+      if (consentPollTimer) clearInterval(consentPollTimer);
+      let attempts = 0;
+      consentPollTimer = setInterval(async () => {
+        attempts++;
+        if (attempts > 30) {
+          clearInterval(consentPollTimer);
+          return;
+        }
+        await checkConsentHandshake(healthId, true);
+      }, 2000);
+    }
+
+    async function checkConsentHandshake(healthId, silent = false) {
+      await checkActiveConsentForPatient(healthId);
+      if (activeToken) {
+        if (consentPollTimer) clearInterval(consentPollTimer);
+        activeRequestId = null;
+        renderResults(currentDiscoveredData);
+        if (!silent) alert('Consent Granted! Access token is now active. Fetching records...');
+        fetchFederatedRecords(healthId, activeToken.token_id);
+      } else if (!silent) {
+        alert('Still awaiting patient approval. Please ask the patient to approve the request in their Patient App.');
+      }
+    }
+
+    // Federated Clinical Records Fetching
+    async function fetchFederatedRecords(healthId, tokenId) {
+      const container = document.getElementById('clinicalViewerContainer');
+      if (!container) return;
+
+      container.innerHTML = `
+        <div class="results-empty-state">
+          <h3>Querying Federated Nodes...</h3>
+          <p style="font-size: 12px; margin-top: 4px;">Contacting Apollo (:8081), Fortis (:8082), and Max (:8083) in parallel under Contract C-08 SLA...</p>
+        </div>
+      `;
+
+      try {
+        const res = await fetch(`${API_BASE}/records/fetch`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ health_id: healthId, token_id: tokenId })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          if (res.status === 422) {
+            activeToken = null;
+            renderResults(currentDiscoveredData);
+            alert('Access Token Revoked or Expired. Please request consent again.');
+            return;
+          }
+          throw new Error(data.error || 'Failed to aggregate clinical records');
+        }
+
+        renderClinicalViewer(data);
+
+      } catch (err) {
+        container.innerHTML = `
+          <div class="alert alert-error" style="display: block;">
+            <strong>Fetch Error</strong>
+            <span>${err.message}</span>
+          </div>
+        `;
+      }
+    }
+
+    function renderClinicalViewer(data) {
+      const container = document.getElementById('clinicalViewerContainer');
+      const records = data.records || {};
+      const totalOmitted = data.total_sensitive_records_omitted || 0;
+
+      let warningHtml = '';
+      if (totalOmitted > 0) {
+        const omittedList = Object.entries(data.sensitive_records_omitted || {})
+          .filter(([k, v]) => v > 0)
+          .map(([k, v]) => `${v} ${k}`)
+          .join(', ');
+
+        warningHtml = `
+          <div class="sensitive-warning-banner">
+            <div>
+              <strong>🔒 Sensitive Records Locked:</strong>
+              <span>${omittedList} records were omitted because the patient did not grant permission for sensitive categories.</span>
+            </div>
+            <a href="patient.html" target="_blank" style="color: #000; background: #FCD34D; padding: 4px 8px; font-weight: 700; text-decoration: none; font-size: 10px;">Open Patient App to Unlock &rarr;</a>
+          </div>
+        `;
+      }
+
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function renderCategoryCard(title, icon, items) {
+        if (!items || items.length === 0) return '';
+        return `
+          <div class="clinical-category-card">
+            <div class="cat-header">
+              <span>${icon} ${title}</span>
+              <span style="font-size: 10px; color: #38BDF8; font-weight: 500;">${items.length} Recorded • Click row to inspect</span>
+            </div>
+            ${items.map((item, idx) => {
+              const uniqueRowId = `rec-${Math.random().toString(36).substr(2, 9)}`;
+              const rawJson = item.raw_resource || item.raw_fhir_summary || { resourceType: item.resource_type, id: item.id, text: item.clinical_text };
+              const jsonFormatted = JSON.stringify(rawJson, null, 2);
+
+              return `
+                <div class="record-row" id="${uniqueRowId}" onclick="toggleRecordDetail('${uniqueRowId}')">
+                  <div class="record-row-summary">
+                    <div class="record-desc">
+                      <div style="font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                        <span>${escapeHtml(item.clinical_text)}</span>
+                        <span class="expand-indicator">▼</span>
+                      </div>
+                      ${item.finding && item.finding !== item.clinical_text ? `
+                        <div class="record-quick-finding">
+                          <strong>Finding:</strong> ${escapeHtml(item.finding)}
+                        </div>
+                      ` : ''}
+                      ${item.is_sensitive ? `<div style="margin-top: 4px;"><span class="sensitive-badge-unlocked">🔒 SENSITIVE: ${item.sensitive_category.toUpperCase()}</span></div>` : ''}
+                    </div>
+                    <div class="record-badges">
+                      <span class="node-source-pill">${escapeHtml(item.institution_name || item.institution_id)}</span>
+                      <span class="date-pill">${item.recorded_date ? item.recorded_date.slice(0, 10) : '—'}</span>
+                    </div>
+                  </div>
+
+                  <!-- Expandable Detail Drawer -->
+                  <div class="record-detail-drawer" onclick="event.stopPropagation()">
+                    <div class="detail-grid">
+                      ${item.finding ? `
+                        <div class="detail-item-full">
+                          <div class="detail-label">📋 Diagnostic Finding / Clinical Conclusion</div>
+                          <div class="detail-val-highlight">${escapeHtml(item.finding)}</div>
+                        </div>
+                      ` : ''}
+
+                      <div class="detail-item">
+                        <div class="detail-label">👨‍⚕️ Attending Clinician / Doctor</div>
+                        <div class="detail-val">${escapeHtml(item.doctor_name || 'Hospital Attending / Staff')}</div>
+                      </div>
+
+                      <div class="detail-item">
+                        <div class="detail-label">🏷️ Standard Clinical Coding</div>
+                        <div class="detail-val">
+                          ${item.code_system ? `<span class="code-pill">${escapeHtml(item.code_system)}</span>` : ''}
+                          <span>${escapeHtml(item.code_value || '—')}</span>
+                          ${item.code_display ? `<span style="color:#8C8C8C;"> (${escapeHtml(item.code_display)})</span>` : ''}
+                        </div>
+                      </div>
+
+                      <div class="detail-item">
+                        <div class="detail-label">📊 Verification / Status</div>
+                        <div class="detail-val"><span class="status-pill-green">${escapeHtml((item.status || 'FINAL').toUpperCase())}</span></div>
+                      </div>
+
+                      <div class="detail-item">
+                        <div class="detail-label">🏥 Hospital Node</div>
+                        <div class="detail-val">${escapeHtml(item.institution_name || item.institution_id)} (${escapeHtml(item.institution_id)})</div>
+                      </div>
+
+                      <div class="detail-item">
+                        <div class="detail-label">📅 Clinical Date / Time</div>
+                        <div class="detail-val">${escapeHtml(item.recorded_date || '—')}</div>
+                      </div>
+
+                      <div class="detail-item">
+                        <div class="detail-label">🆔 FHIR Resource Reference</div>
+                        <div class="detail-val">${escapeHtml(item.resource_type || 'Resource')}/${escapeHtml(item.id)}</div>
+                      </div>
+                    </div>
+
+                    <div style="margin-top: 14px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #1E293B; padding-top: 10px;">
+                      <button type="button" class="btn-inspect-fhir" onclick="toggleFhirJson('${uniqueRowId}')">
+                        🔍 Toggle Raw FHIR R4 JSON
+                      </button>
+                      <button type="button" class="btn-copy-fhir" onclick="copyFhirJson('${uniqueRowId}', this)">
+                        📋 Copy FHIR JSON
+                      </button>
+                    </div>
+
+                    <pre class="fhir-raw-viewer" id="fhir-${uniqueRowId}">${escapeHtml(jsonFormatted)}</pre>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+
+      container.innerHTML = `
+        <div class="clinical-viewer">
+          <div class="viewer-header">
+            <div>
+              <div class="viewer-title">Unified Federated Medical Record</div>
+              <div class="viewer-meta">Aggregated across ${Object.keys(data.node_statuses || {}).length} hospital nodes • Total ${data.total_records_returned} resources retrieved</div>
+            </div>
+            <div style="font-size: 11px; color: #10B981; font-weight: 600;">
+              Live Token Valid • Token ID: ${data.token_id.slice(0, 14)}...
+            </div>
+          </div>
+
+          ${warningHtml}
+
+          ${renderCategoryCard('Critical Allergies & Intolerances', '🚨', records.allergies)}
+          ${renderCategoryCard('Active Prescriptions & Medications', '💊', records.medications)}
+          ${renderCategoryCard('Diagnosed Conditions & Problems', '🩺', records.conditions)}
+          ${renderCategoryCard('Diagnostic Studies & Laboratory Panels', '🔬', records.lab_reports)}
+          ${renderCategoryCard('Procedures & Encounters', '🏥', records.encounters_procedures)}
+        </div>
+      `;
+    }
+
+    function toggleRecordDetail(rowId) {
+      const el = document.getElementById(rowId);
+      if (el) el.classList.toggle('open');
+    }
+
+    function toggleFhirJson(rowId) {
+      const viewer = document.getElementById('fhir-' + rowId);
+      if (viewer) {
+        viewer.style.display = (viewer.style.display === 'block') ? 'none' : 'block';
+      }
+    }
+
+    function copyFhirJson(rowId, btn) {
+      const viewer = document.getElementById('fhir-' + rowId);
+      if (viewer) {
+        navigator.clipboard.writeText(viewer.textContent).then(() => {
+          if (btn) {
+            const originalText = btn.textContent;
+            btn.textContent = '✓ Copied!';
+            setTimeout(() => { btn.textContent = originalText; }, 2000);
+          }
+        });
+      }
     }
   </script>
 </body>
