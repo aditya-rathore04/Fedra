@@ -181,6 +181,31 @@ Every session must append a new entry to the bottom of this file.
   - Duplicate key error on `system_db.consent_policies.policy_id_1` when multiple pending requests were created with `null` policy_id; resolved using partialFilterExpression.
 - **Next Task:** Ready for end-to-end interactive demo or Phase 3 Blockchain Audit deployment.
 
+---
+
+### 2026-09-30 · Session 8 · Aditya & Antigravity Agent
+- **Goal:** Indian Patient Cohort Synchronization & Fast Login Coverage.
+- **Task:** Correct patient identity mismatch (Ananya Reddy vs Ananya Sen, Vikram Shetty vs Vikram Malhotra, Saraswathi Nair vs Saraswathi Raman), expand fast login chips to all 6 cohort patients, and ensure resilient email/ABHA authentication in both the Patient App and Doctor Portal.
+- **Done:**
+  - Resolved patient identity confusions across frontend and spec:
+    - Patient 4 is **Ananya Reddy** (`ABHA-3390-6621-7845`, email `ananya-reddy@test.com`) with sensitive reproductive health records (Dr. Ananya Sen is the oncologist clinician `DOC-ONC-01`).
+    - Patient 5 is **Vikram Shetty** (`ABHA-6604-8817-2239`, email `vikram-shetty@test.com`) with sensitive substance abuse / rehab records.
+    - Patient 3 is **Saraswathi Nair** (`ABHA-5528-1193-4402`, email `saraswathi-nair@test.com`) with cardiology stent records.
+  - Enhanced Gateway Identity Service (`backend/index.js`):
+    - Added flexible alias mapping in `POST /auth/login` to accept hyphenated emails, dotted emails, common demo aliases, and raw ABHA Health IDs directly.
+  - Enhanced Patient Web App (`frontend/patient.html`):
+    - Expanded fast login buttons from 4 to **all 6 Indian cohort patients** (Lakshmi Venkatesh, Krishnamurthy Rao, Saraswathi Nair, Ananya Reddy, Vikram Shetty, and Anika Pillai via guardian Kavya Pillai).
+  - Enhanced Doctor Portal (`frontend/dashboard.html`):
+    - Expanded quick suggestion chips to include all 6 Indian patients with full clinical summaries and hospital tags.
+  - Verification & Health:
+    - 13/13 patient login variants tested and passing via automated verification.
+    - Full regression test run: `npm run test:phase2` (48/48 PASS), `npm run test:patients` (45/45 PASS), `npm run test:phase1` (33/33 PASS) — Total 126/126 passing.
+- **Deviations:** None.
+- **Bugs Found & Resolved:**
+  - Fast login chips in `frontend/patient.html` previously referenced non-existent accounts (`ananya.sen@test.com`, `vikram.malhotra@test.com`, `saraswathi.raman@test.com`). Corrected to spec identities with alias fallback.
+- **Next Task:** Proceed with Phase 3 Blockchain Audit deployment or live evaluation.
+
+
 
 
 

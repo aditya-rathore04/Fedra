@@ -845,11 +845,13 @@
         </div>
 
         <div class="quick-chips">
-          <span class="chip-label">Suggestions:</span>
-          <button type="button" class="quick-chip" onclick="setQuery('ABHA-4471-2298-6613')">Lakshmi (Apollo • 🔒 Sensitive: Psych)</button>
-          <button type="button" class="quick-chip" onclick="setQuery('ABHA-3390-6621-7845')">Ananya (Fortis & Apollo • 🔒 Repro)</button>
-          <button type="button" class="quick-chip" onclick="setQuery('ABHA-6604-8817-2239')">Vikram (Max & Apollo • 🔒 Substance)</button>
-          <button type="button" class="quick-chip" onclick="setQuery('ABHA-5528-1193-4402')">Saraswathi (Apollo & Max • Cardiology)</button>
+          <span class="chip-label">Indian Cohort:</span>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-4471-2298-6613')">1. Lakshmi Venkatesh (Apollo • 🔒 Psych)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-7712-4456-9081')">2. Krishnamurthy Rao (Fortis & Apollo • Geriatric)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-5528-1193-4402')">3. Saraswathi Nair (Apollo & Max • Cardio)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-3390-6621-7845')">4. Ananya Reddy (Fortis & Apollo • 🔒 Repro)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-6604-8817-2239')">5. Vikram Shetty (Max & Apollo • 🔒 Substance)</button>
+          <button type="button" class="quick-chip" onclick="setQuery('ABHA-1147-9903-5561')">6. Anika Pillai (Fortis • Minor UIP)</button>
         </div>
       </form>
     </section>
@@ -1025,6 +1027,9 @@
           <button class="btn-action-success" onclick="fetchFederatedRecords('${data.health_id}', '${activeToken.token_id}')">
             ⚡ Fetch Clinical Records &rarr;
           </button>
+          <button class="btn-cancel" style="border-color: #EF4444; color: #EF4444; font-size: 11px; padding: 7px 12px; cursor: pointer;" onclick="revokeActiveConsent('${activeToken.policy_id}', '${data.health_id}')" title="Revoke this token to re-test patient approval handshake">
+            🔄 Revoke Token (Re-test)
+          </button>
         `;
       } else if (activeRequestId) {
         consentStatusHtml = `
@@ -1113,6 +1118,33 @@
       });
 
       resultsArea.innerHTML = html;
+    }
+
+    async function revokeActiveConsent(policyId, healthId) {
+      if (!confirm('Revoke this active consent token? This will reset the status to "No Active Consent" so you can test the patient approval flow again.')) return;
+      try {
+        const res = await fetch(`${API_BASE}/consent/revoke`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ policy_id: policyId })
+        });
+        if (res.ok) {
+          activeToken = null;
+          activeRequestId = null;
+          const viewer = document.getElementById('clinicalViewerContainer');
+          if (viewer) viewer.innerHTML = '';
+          await checkActiveConsentForPatient(healthId);
+          renderResults(currentDiscoveredData);
+        } else {
+          const err = await res.json();
+          alert('Revoke failed: ' + (err.error || 'Unknown error'));
+        }
+      } catch (e) {
+        alert('Error revoking consent: ' + e.message);
+      }
     }
 
     // Modal logic
