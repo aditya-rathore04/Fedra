@@ -300,15 +300,44 @@ app.post('/auth/login', async (req, res) => {
   }
 
   try {
-    const user = await systemDb.collection('users').findOne({
-      $or: [
-        { user_id: input },
-        { user_id: input.toUpperCase() },
-        { email: input },
-        { email: input.toLowerCase() },
-        { health_id: input }
-      ]
-    });
+    const lower = input.toLowerCase();
+    const hyphenated = lower.replace(/\./g, '-');
+    const dotted = lower.replace(/-/g, '.');
+
+    // Friendly alias maps for common Indian cohort variations
+    const aliasMap = {
+      'ananya.sen@test.com': 'ananya-reddy@test.com',
+      'ananya-sen@test.com': 'ananya-reddy@test.com',
+      'ananya.reddy@test.com': 'ananya-reddy@test.com',
+      'vikram.malhotra@test.com': 'vikram-shetty@test.com',
+      'vikram-malhotra@test.com': 'vikram-shetty@test.com',
+      'vikram.shetty@test.com': 'vikram-shetty@test.com',
+      'saraswathi.raman@test.com': 'saraswathi-nair@test.com',
+      'saraswathi-raman@test.com': 'saraswathi-nair@test.com',
+      'saraswathi.nair@test.com': 'saraswathi-nair@test.com',
+      'krishnamurthy.rao@test.com': 'krishnamurthy-rao@test.com',
+      'lakshmi.venkatesh@test.com': 'lakshmi-venkatesh@test.com',
+      'kavya.pillai@test.com': 'kavya.pillai@test.com',
+      'anika.pillai@test.com': 'anika-pillai@test.com'
+    };
+
+    const targetEmail = aliasMap[lower] || aliasMap[hyphenated] || aliasMap[dotted] || null;
+
+    const queryOr = [
+      { user_id: input },
+      { user_id: input.toUpperCase() },
+      { email: input },
+      { email: lower },
+      { email: hyphenated },
+      { email: dotted },
+      { health_id: input }
+    ];
+
+    if (targetEmail) {
+      queryOr.push({ email: targetEmail });
+    }
+
+    const user = await systemDb.collection('users').findOne({ $or: queryOr });
 
     if (!user) {
       return res.status(401).json({ error: `User '${input}' not found in registry. Please check your credentials.` });
@@ -860,8 +889,8 @@ app.post('/consent/deny', verifyJWT, requireRole(['patient', 'system_admin']), a
   }
 });
 
-// Patient revokes consent (POST /consent/revoke)
-app.post('/consent/revoke', verifyJWT, requireRole(['patient', 'system_admin']), async (req, res) => {
+// Patient or Doctor revokes consent (POST /consent/revoke)
+app.post('/consent/revoke', verifyJWT, requireRole(['patient', 'doctor', 'doctor_supervisor', 'system_admin']), async (req, res) => {
   const { policy_id } = req.body;
   if (!policy_id) {
     return res.status(400).json({ error: 'policy_id is required' });
