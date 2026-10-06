@@ -4,46 +4,72 @@ networks:
   mednet:
     driver: bridge
 
-
 services:
+  # ─── Hospital Node 1 — Apollo Memorial ──────────────────────────────
   hospital1-fhir:
     image: hapiproject/hapi:latest
     container_name: hospital1-fhir
     ports: ["8081:8080"]
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xmx384m -Xms128m -Xss512k -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC
+      - SERVER_TOMCAT_THREADS_MAX=20
+      - SERVER_TOMCAT_THREADS_MIN_SPARE=2
+    mem_limit: 480m
     networks: [mednet]
 
   hospital1-mongo:
     image: mongo:7
     container_name: hospital1-mongo
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]
     ports: ["27017:27017"]
+    mem_limit: 220m
     networks: [mednet]
 
+  # ─── Hospital Node 2 — Fortis Healthcare ────────────────────────────
   hospital2-fhir:
     image: hapiproject/hapi:latest
     container_name: hospital2-fhir
     ports: ["8082:8080"]
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xmx384m -Xms128m -Xss512k -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC
+      - SERVER_TOMCAT_THREADS_MAX=20
+      - SERVER_TOMCAT_THREADS_MIN_SPARE=2
+    mem_limit: 480m
     networks: [mednet]
 
   hospital2-mongo:
     image: mongo:7
     container_name: hospital2-mongo
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]
     ports: ["27018:27017"]
+    mem_limit: 220m
     networks: [mednet]
 
+  # ─── Hospital Node 3 — Max Super Specialty ──────────────────────────
   hospital3-fhir:
     image: hapiproject/hapi:latest
     container_name: hospital3-fhir
     ports: ["8083:8080"]
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xmx384m -Xms128m -Xss512k -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC
+      - SERVER_TOMCAT_THREADS_MAX=20
+      - SERVER_TOMCAT_THREADS_MIN_SPARE=2
+    mem_limit: 480m
     networks: [mednet]
 
   hospital3-mongo:
     image: mongo:7
     container_name: hospital3-mongo
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]
     ports: ["27019:27017"]
+    mem_limit: 220m
     networks: [mednet]
 
+  # ─── Central Registry & System Mongo ────────────────────────────────
   system-mongo:
     image: mongo:7
     container_name: system-mongo
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]
     ports: ["27020:27017"]
+    mem_limit: 220m
     networks: [mednet]

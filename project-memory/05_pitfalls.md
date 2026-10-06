@@ -62,6 +62,16 @@ A compilation of critical failure modes, non-obvious runtime behaviors, and prov
     ```powershell
     $env:PORT=3100; node index.js
     ```
-    (Frontend dynamically matches host port via `window.location.origin`).
+## 10. Unconstrained Docker & JVM Memory Ballooning in WSL2
+- **Symptom:** Windows Task Manager shows `vmmemWSL` consuming 6–8 GB of RAM; free host memory drops below 1 GB, causing system slowdowns.
+- **Cause:**
+  1. HAPI FHIR containers run OpenJDK 21 via Spring Boot. Without explicit `-Xmx` or container limits, JVM ergonomics allocate ~25% of visible VM memory to each instance, causing the 3 FHIR nodes alone to consume >4.2 GB RSS.
+  2. G1GC allocates 100–150 MB of native metadata structures per JVM.
+  3. Default Tomcat spawns up to 200 worker threads with 1 MB stack sizes.
+  4. WSL2 by default retains Linux page cache without returning pages to Windows unless configured.
+- **Rule:**
+  - Constrain HAPI FHIR in `docker-compose.yml` with `JAVA_TOOL_OPTIONS=-Xmx384m -Xms128m -Xss512k -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC`, `SERVER_TOMCAT_THREADS_MAX=20`, and `mem_limit: 480m`.
+  - Constrain MongoDB instances with `command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]` and `mem_limit: 220m`.
+  - Maintain `C:\Users\<User>\.wslconfig` with `memory=3.5GB` and `[experimental] autoMemoryReclaim=gradual` to continuously release cached RAM to Windows.
 
 

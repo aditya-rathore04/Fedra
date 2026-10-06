@@ -21,7 +21,8 @@ const FHIR_HOSP3_URL = process.env.FHIR_HOSP3_URL || 'http://localhost:8083/fhir
 
 const SEEDED_ABHAS = [
   'ABHA-4471-2298-6613', 'ABHA-7712-4456-9081', 'ABHA-5528-1193-4402',
-  'ABHA-3390-6621-7845', 'ABHA-6604-8817-2239', 'ABHA-1147-9903-5561'
+  'ABHA-3390-6621-7845', 'ABHA-6604-8817-2239', 'ABHA-1147-9903-5561',
+  'ABHA-DEMO-001'
 ];
 
 const HOSPITALS = {
@@ -273,9 +274,15 @@ async function main() {
 
     // Phase 5: Seed central registry
     console.log('\nPhase 5: Seed central registry');
-    const registryEntries = PATIENTS.flatMap(patient => patient.locations.map(location => registryDocument(patient, location)));
+    const registryEntries = PATIENTS.flatMap(patient => [
+      ...patient.locations.map(location => registryDocument(patient, location)),
+      ...(patient.aliases || []).flatMap(alias => patient.locations.map(location => ({
+        ...registryDocument(patient, location),
+        health_id: alias
+      })))
+    ]);
     await registryDb.collection('registry_entries').insertMany(registryEntries);
-    console.log(`  Inserted ${registryEntries.length} registry entries.`);
+    console.log(`  Inserted ${registryEntries.length} registry entries (including alias links).`);
 
     // Phase 6: Seed system users
     console.log('\nPhase 6: Seed system users');

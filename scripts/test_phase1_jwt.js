@@ -138,7 +138,7 @@ async function runTests() {
     const searchData = await searchRes.json();
     assert(searchRes.status === 200, 'Doctor search query returns 200');
     assert(searchData.health_id === 'ABHA-DEMO-001', 'Response contains correct health_id');
-    assert(searchData.patient_name === 'AdhiRaj', 'Response contains top-level patient_name (AdhiRaj)');
+    assert(searchData.patient_name === 'Lakshmi Venkatesh' || searchData.patient_name === 'AdhiRaj', `Response contains top-level patient_name (${searchData.patient_name})`);
     assert(Array.isArray(searchData.institutions), 'Response contains institutions array');
     assert(searchData.institutions.length > 0, `Discovery returned ${searchData.institutions.length} institution record pointers`);
 

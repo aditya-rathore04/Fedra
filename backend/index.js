@@ -22,6 +22,42 @@ const client = new MongoClient(MONGO_URI);
 let systemDb;
 let registryDb;
 
+// Hospital persistence clients for safe harbor emergency queries
+const HOSP1_MONGO_URI = process.env.HOSP1_MONGO_URI || 'mongodb://localhost:27017/hospital1_db';
+const HOSP2_MONGO_URI = process.env.HOSP2_MONGO_URI || 'mongodb://localhost:27018/hospital2_db';
+const HOSP3_MONGO_URI = process.env.HOSP3_MONGO_URI || 'mongodb://localhost:27019/hospital3_db';
+
+const hospClients = {
+  'HOSP-1': new MongoClient(HOSP1_MONGO_URI, { maxPoolSize: 5 }),
+  'HOSP-2': new MongoClient(HOSP2_MONGO_URI, { maxPoolSize: 5 }),
+  'HOSP-3': new MongoClient(HOSP3_MONGO_URI, { maxPoolSize: 5 })
+};
+
+async function findPatientSafeHarbor(healthId) {
+  const hospitalConfigs = [
+    { id: 'HOSP-1', client: hospClients['HOSP-1'], dbName: 'hospital1_db', name: 'Apollo Memorial Hospital' },
+    { id: 'HOSP-2', client: hospClients['HOSP-2'], dbName: 'hospital2_db', name: 'Fortis Healthcare Center' },
+    { id: 'HOSP-3', client: hospClients['HOSP-3'], dbName: 'hospital3_db', name: 'Max Super Specialty Hospital' }
+  ];
+
+  for (const h of hospitalConfigs) {
+    try {
+      const p = await h.client.db(h.dbName).collection('patients').findOne({
+        $or: [
+          { health_id: healthId },
+          { aliases: healthId }
+        ]
+      });
+      if (p && (p.safe_harbor || p.demographics)) {
+        return { patient: p, hospital: h };
+      }
+    } catch (e) {
+      // Continue to next node
+    }
+  }
+  return null;
+}
+
 // Contract C-01 Role Token Lifetimes (in seconds)
 const ROLE_LIFETIMES = {
   doctor: 8 * 3600,            // 8 hours
@@ -257,6 +293,17 @@ async function startServer() {
       await systemDb.collection('access_tokens').createIndex({ expires_at: 1 });
 
       await systemDb.collection('notifications').createIndex({ recipient_id: 1, created_at: -1 });
+
+      // Audit Service Indexes
+      await systemDb.collection('audit_events').createIndex({ subject_health_id: 1, timestamp: -1 });
+      await systemDb.collection('audit_events').createIndex({ 'actor.id': 1, timestamp: -1 });
+      await systemDb.collection('audit_events').createIndex({ event_id: 1 }, { unique: true });
+      await systemDb.collection('audit_events').createIndex({ event_type: 1, timestamp: -1 });
+
+      // Non-blocking connection to local hospital databases for safe harbor queries
+      for (const [hId, hClient] of Object.entries(hospClients)) {
+        hClient.connect().catch(e => console.warn(`Hospital ${hId} Mongo connect warning: ${e.message}`));
+      }
 
       app.listen(PORT, () => {
         console.log(`Federated EHR Gateway running on http://localhost:${PORT}`);
@@ -527,6 +574,71 @@ app.get('/patient/search', verifyJWT, requireRole(['doctor', 'doctor_supervisor'
   } catch (err) {
     console.error('Patient search error:', err);
     res.status(500).json({ error: 'Internal server error during patient discovery' });
+  }
+});
+
+// Safe Harbor Emergency Demographics (GET /patient/safe-harbor) — Accessible without patient consent or tokens
+app.get('/patient/safe-harbor', verifyJWT, requireRole(['doctor', 'doctor_supervisor', 'emergency', 'hospital_admin', 'system_admin', 'admin']), async (req, res) => {
+  const { health_id } = req.query;
+  if (!health_id) {
+    return res.status(400).json({ error: 'Query parameter health_id is required' });
+  }
+
+  try {
+    const found = await findPatientSafeHarbor(health_id);
+    if (found) {
+      const { patient, hospital } = found;
+      return res.json({
+        health_id: patient.health_id,
+        patient_name: patient.demographics?.name || 'Unknown Patient',
+        demographics: {
+          dob: patient.demographics?.dob || null,
+          gender: patient.demographics?.gender || null,
+          blood_type: patient.demographics?.blood_type || 'Unknown'
+        },
+        safe_harbor: {
+          critical_allergies: patient.safe_harbor?.critical_allergies || ['No known critical drug allergies (NKDA)'],
+          emergency_contact: patient.safe_harbor?.emergency_contact || null
+        },
+        home_institution: hospital.name,
+        institution_id: hospital.id,
+        access_type: 'safe_harbor',
+        consent_required: false,
+        retrieved_at: new Date().toISOString()
+      });
+    }
+
+    // Fallback check in central users / registry
+    const [patUser, regEntry] = await Promise.all([
+      systemDb.collection('users').findOne({ health_id }),
+      registryDb.collection('registry_entries').findOne({ health_id })
+    ]);
+
+    if (patUser || regEntry) {
+      return res.json({
+        health_id,
+        patient_name: patUser?.name || regEntry?.patient_name || 'Patient',
+        demographics: {
+          dob: patUser?.birth_date || null,
+          gender: patUser?.gender || null,
+          blood_type: 'Unknown / Not Typed'
+        },
+        safe_harbor: {
+          critical_allergies: ['No known critical drug allergies (NKDA)'],
+          emergency_contact: null
+        },
+        home_institution: regEntry?.institution_name || 'Registered Clinic',
+        institution_id: regEntry?.institution_id || null,
+        access_type: 'safe_harbor',
+        consent_required: false,
+        retrieved_at: new Date().toISOString()
+      });
+    }
+
+    return res.status(404).json({ error: `No safe harbor data found for Health ID '${health_id}'` });
+  } catch (err) {
+    console.error('Safe harbor lookup error:', err);
+    res.status(500).json({ error: 'Internal server error retrieving safe harbor emergency data' });
   }
 });
 
@@ -993,6 +1105,207 @@ app.post('/consent/sensitive', verifyJWT, requireRole(['patient', 'system_admin'
   }
 });
 
+// Emergency staff triggers break-glass access (POST /consent/break-glass)
+app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_supervisor', 'emergency', 'system_admin']), async (req, res) => {
+  const { health_id, justification, requested_duration_hrs } = req.body;
+
+  if (!health_id) {
+    return res.status(400).json({ error: 'Missing required field: health_id is mandatory for emergency access' });
+  }
+
+  if (!justification || typeof justification !== 'string' || justification.trim().length < 10) {
+    return res.status(400).json({
+      error: 'Valid clinical justification is mandatory for emergency break-glass access (minimum 10 characters).'
+    });
+  }
+
+  try {
+    // 1. Rate limiting friction: max 3 requests / hour per doctor (docs/05 §Rate Limiting)
+    const oneHourAgo = new Date(Date.now() - 3600 * 1000);
+    const recentBgCount = await systemDb.collection('audit_events').countDocuments({
+      'actor.id': req.user.user_id,
+      event_type: 'break_glass_triggered',
+      timestamp: { $gte: oneHourAgo }
+    });
+
+    if (recentBgCount >= 3) {
+      await systemDb.collection('audit_events').insertOne({
+        event_id: `EVT-RL-${crypto.randomUUID()}`,
+        event_type: 'rate_limit_exceeded',
+        actor: { id: req.user.user_id, role: req.user.role, institution_id: req.user.institution_id },
+        subject_health_id: health_id,
+        timestamp: new Date(),
+        metadata: { endpoint: '/consent/break-glass', limit: 3, window_hrs: 1, attempt_count: recentBgCount + 1 }
+      });
+      return res.status(429).json({
+        error: 'Rate limit exceeded: Maximum 3 break-glass emergency declarations per hour per clinician',
+        code: 429
+      });
+    }
+
+    // 2. Discover patient & safe harbor details
+    const [regEntry, patUser, safeHarborResult] = await Promise.all([
+      registryDb.collection('registry_entries').findOne({ health_id }),
+      systemDb.collection('users').findOne({ health_id }),
+      findPatientSafeHarbor(health_id)
+    ]);
+
+    const patientName = safeHarborResult?.patient?.demographics?.name 
+      || regEntry?.patient_name 
+      || patUser?.name 
+      || 'Emergency Patient';
+
+    const emergencyContact = safeHarborResult?.patient?.safe_harbor?.emergency_contact || null;
+
+    // 3. Issue 2-Hour Emergency Access Token (<50ms SLA)
+    const defaultWindowHrs = 2;
+    const requestedDuration = Number(requested_duration_hrs) || defaultWindowHrs;
+    const expiresAt = new Date(Date.now() + defaultWindowHrs * 3600 * 1000);
+    const tokenId = `TOK-BG-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+    const eventId = `EVT-BG-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+
+    const tokenDoc = {
+      token_id: tokenId,
+      health_id,
+      doctor_id: req.user.user_id,
+      institution_id: req.user.institution_id || 'HOSP-EMERGENCY',
+      token_type: 'break_glass',
+      patient_name: patientName,
+      issued_at: new Date(),
+      expires_at: expiresAt,
+      status: 'active',
+      scope: {
+        general_access: true,
+        sensitive_categories: {
+          psychiatric: false,
+          reproductive: false,
+          hiv: false,
+          substance_abuse: false
+        }
+      },
+      break_glass_context: {
+        event_id: eventId,
+        justification: justification.trim(),
+        requested_duration_hrs: requestedDuration,
+        extension_request_status: requestedDuration > 2 ? 'pending_supervisor' : 'none',
+        extension_history: [],
+        grace_period_started_at: null,
+        reinstated_at: null
+      }
+    };
+
+    await systemDb.collection('access_tokens').insertOne(tokenDoc);
+    cacheToken(tokenDoc);
+
+    // 4. Real-Time Patient & Caregiver Notification Dispatch
+    const notifications = [
+      {
+        notification_id: `NOTIF-${crypto.randomUUID()}`,
+        recipient_id: health_id,
+        recipient_role: 'patient',
+        notification_type: 'break_glass_triggered',
+        payload: {
+          doctor_id: req.user.user_id,
+          doctor_name: req.user.name || req.user.user_id,
+          institution_id: req.user.institution_id,
+          event_id: eventId,
+          justification: justification.trim(),
+          window_hrs: defaultWindowHrs,
+          categories_accessed: ['allergy', 'medication', 'condition', 'encounter', 'procedure', 'lab_result']
+        },
+        status: 'delivered',
+        created_at: new Date()
+      }
+    ];
+
+    if (emergencyContact) {
+      notifications.push({
+        notification_id: `NOTIF-CG-${crypto.randomUUID()}`,
+        recipient_id: emergencyContact.phone || emergencyContact.name,
+        recipient_role: 'caregiver',
+        recipient_name: emergencyContact.name,
+        recipient_phone: emergencyContact.phone,
+        recipient_relation: emergencyContact.relation,
+        notification_type: 'break_glass_caregiver_alert',
+        payload: {
+          patient_health_id: health_id,
+          patient_name: patientName,
+          doctor_id: req.user.user_id,
+          doctor_name: req.user.name || req.user.user_id,
+          institution_id: req.user.institution_id,
+          event_id: eventId,
+          justification: justification.trim(),
+          window_hrs: defaultWindowHrs
+        },
+        channels: ['sms', 'push'],
+        status: 'delivered',
+        created_at: new Date()
+      });
+    }
+
+    await systemDb.collection('notifications').insertMany(notifications);
+
+    // 5. Immutable Audit Event (Contract C-04 hash chaining genesis)
+    const auditEvent = {
+      event_id: eventId,
+      event_type: 'break_glass_triggered',
+      timestamp: new Date(),
+      actor: {
+        id: req.user.user_id,
+        role: req.user.role,
+        institution_id: req.user.institution_id || 'HOSP-EMERGENCY'
+      },
+      subject_health_id: health_id,
+      linked_event_id: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      metadata: {
+        justification: justification.trim(),
+        token_id: tokenId,
+        default_window_hrs: defaultWindowHrs,
+        requested_duration_hrs: requestedDuration,
+        caregiver_alerted: !!emergencyContact
+      },
+      blockchain_tx_hash: null,
+      ml_features: {
+        hour_of_day: new Date().getHours(),
+        day_of_week: new Date().getDay(),
+        is_outside_shift_hours: (new Date().getHours() < 7 || new Date().getHours() >= 21),
+        is_weekend: (new Date().getDay() === 0 || new Date().getDay() === 6),
+        has_declared_clinical_rel: false,
+        is_break_glass: true,
+        sensitive_category_accessed: false,
+        categories_accessed_count: 5,
+        records_accessed_last_hour: recentBgCount,
+        records_accessed_last_day: recentBgCount + 1,
+        unique_patients_last_hour: 1,
+        deviation_from_baseline: 0.0
+      }
+    };
+
+    await systemDb.collection('audit_events').insertOne(auditEvent);
+
+    // 6. Return standard spec response (docs/05)
+    res.status(200).json({
+      token_id: tokenId,
+      event_id: eventId,
+      token_type: 'break_glass',
+      default_window_hrs: defaultWindowHrs,
+      expires_at: expiresAt.toISOString(),
+      extension_request_status: requestedDuration > 2 ? 'pending_supervisor' : 'none',
+      patient_notified: true,
+      caregiver_notified: !!emergencyContact,
+      caregiver_details: emergencyContact ? {
+        name: emergencyContact.name,
+        phone: emergencyContact.phone,
+        relation: emergencyContact.relation
+      } : null
+    });
+
+  } catch (err) {
+    console.error('Break-glass declaration error:', err);
+    res.status(500).json({ error: 'Internal server error processing break-glass declaration' });
+  }
+});
+
 // Validate access token (GET /consent/validate)
 app.get('/consent/validate', async (req, res) => {
   const start = performance.now();
@@ -1182,7 +1495,7 @@ app.post('/records/fetch', verifyJWT, requireRole(['doctor', 'doctor_supervisor'
         const processRecord = (resource, category) => {
           const sensitiveCat = detectSensitiveCategory(resource);
           if (sensitiveCat) {
-            const isGranted = Boolean(tokenScope.sensitive_categories?.[sensitiveCat]);
+            const isGranted = (token.token_type !== 'break_glass') && Boolean(tokenScope.sensitive_categories?.[sensitiveCat]);
             if (!isGranted) {
               sensitiveOmittedCounts[sensitiveCat] = (sensitiveOmittedCounts[sensitiveCat] || 0) + 1;
               return null; // Strip sensitive record
@@ -1300,6 +1613,44 @@ app.post('/records/fetch', verifyJWT, requireRole(['doctor', 'doctor_supervisor'
 
     const totalRecords = Object.values(categorizedRecords).reduce((sum, list) => sum + list.length, 0);
     const totalOmitted = Object.values(sensitiveOmittedCounts).reduce((sum, cnt) => sum + cnt, 0);
+
+    // Contract C-03: Log access event into audit trail
+    try {
+      const accessEvent = {
+        event_id: `EVT-ACC-${crypto.randomUUID()}`,
+        event_type: 'record_access',
+        timestamp: new Date(),
+        actor: {
+          id: req.user.user_id,
+          role: req.user.role,
+          institution_id: req.user.institution_id || 'HOSP-UNKNOWN'
+        },
+        patient: { health_id },
+        subject_health_id: health_id,
+        metadata: {
+          token_id,
+          token_type: token.token_type || 'standard',
+          total_records_returned: totalRecords,
+          total_sensitive_omitted: totalOmitted,
+          nodes_queried: Object.keys(nodeStatuses)
+        },
+        ml_features: {
+          hour_of_day: new Date().getHours(),
+          is_outside_shift_hours: (new Date().getHours() < 7 || new Date().getHours() >= 21),
+          is_weekend: (new Date().getDay() === 0 || new Date().getDay() === 6),
+          is_break_glass: token.token_type === 'break_glass',
+          sensitive_category_accessed: Object.values(tokenScope.sensitive_categories || {}).some(Boolean),
+          categories_accessed_count: Object.keys(categorizedRecords).filter(k => categorizedRecords[k].length > 0).length,
+          records_accessed_last_hour: totalRecords,
+          records_accessed_last_day: totalRecords,
+          unique_patients_last_hour: 1,
+          deviation_from_baseline: 0.0
+        }
+      };
+      await systemDb.collection('audit_events').insertOne(accessEvent);
+    } catch (auditErr) {
+      console.error('Non-blocking audit log error in records fetch:', auditErr);
+    }
 
     res.json({
       health_id,
@@ -1461,6 +1812,54 @@ app.get('/records/patient', verifyJWT, requireRole(['patient']), async (req, res
   } catch (err) {
     console.error('Patient timeline fetch error:', err);
     res.status(500).json({ error: 'Internal server error retrieving patient timeline' });
+  }
+});
+
+// ==========================================
+// 7. AUDIT TRAIL SERVICE
+// ==========================================
+
+// Retrieve chronological audit trail for a patient (GET /audit/patient/:health_id)
+app.get('/audit/patient/:health_id', verifyJWT, async (req, res) => {
+  const { health_id } = req.params;
+
+  if (!health_id) {
+    return res.status(400).json({ error: 'health_id parameter is required' });
+  }
+
+  // Authorization: Patient can only view their own audit trail; Clinicians/Admins/Supervisors can view
+  if (req.user.role === 'patient') {
+    let patientHealthId = req.user.health_id;
+    if (!patientHealthId) {
+      const userDoc = await systemDb.collection('users').findOne({ user_id: req.user.user_id });
+      patientHealthId = userDoc?.health_id;
+    }
+    if (patientHealthId !== health_id) {
+      return res.status(403).json({ error: 'Access denied: Patients can only view their own audit events' });
+    }
+  }
+
+  try {
+    const events = await systemDb.collection('audit_events')
+      .find({
+        $or: [
+          { subject_health_id: health_id },
+          { 'patient.health_id': health_id }
+        ]
+      })
+      .sort({ timestamp: -1 })
+      .limit(100)
+      .toArray();
+
+    res.json({
+      health_id,
+      total_events: events.length,
+      retrieved_at: new Date().toISOString(),
+      events
+    });
+  } catch (err) {
+    console.error('Audit trail query error:', err);
+    res.status(500).json({ error: 'Internal server error retrieving audit trail' });
   }
 });
 
