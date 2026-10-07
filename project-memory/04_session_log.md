@@ -205,6 +205,91 @@ Every session must append a new entry to the bottom of this file.
   - Fast login chips in `frontend/patient.html` previously referenced non-existent accounts (`ananya.sen@test.com`, `vikram.malhotra@test.com`, `saraswathi.raman@test.com`). Corrected to spec identities with alias fallback.
 - **Next Task:** Proceed with Phase 3 Blockchain Audit deployment or live evaluation.
 
+---
+
+### 2026-10-01 · Session 9 · Aditya & Antigravity Agent
+- **Goal:** Ultra-Lean Docker Memory Optimization & Synthea Purge.
+- **Task:** Diagnose excessive Docker memory consumption (growing from ~4 GB to >7 GB), purge redundant Synthea datasets in favor of pure Indian patient cohort, tune HAPI FHIR OpenJDK 21 and Tomcat thread pools, constrain MongoDB WiredTiger cache, cap host-level WSL2 memory via `.wslconfig`, and verify zero regressions across all 126 test assertions.
+- **Done:**
+  - Diagnosed memory bloat root causes:
+    - 3 HAPI FHIR containers were uncapped in `docker-compose.yml`, allowing OpenJDK 21 ergonomics to claim 1.4–1.5 GB each (4.22 GB total FHIR RSS).
+    - ~3,000 synthetic Synthea records expanded Lucene search indexes, embedded H2 database memory buffers, and Spring entity caches.
+    - G1GC incurred 100–150 MB of native metadata overhead per container; default Tomcat spawned up to 200 idle threads.
+    - WSL2 utility VM (`vmmemWSL`) had no `.wslconfig` memory limit or auto-reclamation rule, ballooning to 6.43 GB and leaving only ~900 MB free host RAM.
+  - Purged Synthea data and streamlined seeding:
+    - Updated `scripts/seed_indian_patients.js` to index patient alias `ABHA-DEMO-001` for Lakshmi Venkatesh across `registry_db` and `system_db.users`.
+    - Updated `scripts/test_phase1_jwt.js` (Test 6) to accept top-level patient name `Lakshmi Venkatesh` or `AdhiRaj`.
+    - Pure Indian patient cohort (~172 resources total) is now the sole primary dataset.
+  - Tuned `docker-compose.yml` for ultra-lean footprint:
+    - Added `JAVA_TOOL_OPTIONS=-Xmx384m -Xms128m -Xss512k -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC` to `hospital1-fhir`, `hospital2-fhir`, and `hospital3-fhir`.
+    - Added `SERVER_TOMCAT_THREADS_MAX=20` and `SERVER_TOMCAT_THREADS_MIN_SPARE=2`.
+    - Set hard container boundary `mem_limit: 480m` on all 3 FHIR containers.
+    - Added `command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]` and `mem_limit: 220m` on all 4 MongoDB containers (`hospital1-3` and `system-mongo`).
+    - Total maximum container ceiling capped at 2.26 GB (`3 × 480m + 4 × 220m`).
+  - Configured Host WSL2 Environment (`C:\Users\adity\.wslconfig`):
+    - Set `[wsl2] memory=3.5GB`, `processors=4`, `swap=2GB`.
+    - Configured `[experimental] autoMemoryReclaim=gradual` to dynamically return cached pages to Windows.
+  - Verification & Results:
+    - Recreated containers and seeded exclusively the Indian cohort via `npm run seed:patients`.
+    - Executed all test suites: `npm run test:patients` (45/45 PASS), `npm run test:phase1` (33/33 PASS), `npm run test:phase2` (48/48 PASS) — **126/126 assertions passing 100%**.
+    - Token validation latency maintained at ~1.98ms (well within Contract `C-02` <50ms SLA).
+    - Total active container RSS dropped from **4.93 GB** down to **1.69 GB** (**66% memory reduction**).
+    - Windows host free physical memory increased from **~900 MB** to **~2.74 GB**.
+    - Documented Pitfall #10 in `project-memory/05_pitfalls.md`.
+- **Deviations:** None.
+- **Decisions Made:**
+  - Standardized on Serial GC (`-XX:+UseSerialGC`) for small containerized Java heaps (<1 GB) due to near-zero native metadata overhead and superior low-memory responsiveness.
+- **Bugs Found & Resolved:**
+  - `test_phase1_jwt.js` Test 6 expected hardcoded name `AdhiRaj`; updated assertion and seed alias mapping to seamlessly resolve `Lakshmi Venkatesh` for `ABHA-DEMO-001`.
+- **Next Task:** Proceed with Phase 3 Break-Glass emergency flows or Blockchain Audit deployment.
+
+---
+
+### 2026-10-02 · Session 10 · Aditya & Antigravity Agent
+- **Goal:** Phase 3 Sprint 1: Break-Glass Emergency Access & Audit Safeguards Implementation.
+- **Task:** Implement Safe Harbor endpoint (`GET /patient/safe-harbor`), Break-Glass declaration (`POST /consent/break-glass`), 2-hour scoped emergency tokens, friction rate limiting (max 3/hr per clinician), patient and caregiver real-time notification dispatch, strict sensitive category lockdown invariant in federated records aggregator (`POST /records/fetch`), Contract `C-04` hash chain genesis link (`0x00...00`), audit trail query endpoint (`GET /audit/patient/:health_id`), and automated test suite (`scripts/test_phase3_breakglass.js`).
+- **Done:**
+  - Implemented Safe Harbor Demographics (`GET /patient/safe-harbor`):
+    - Allows emergency staff to instantly fetch critical drug allergies (e.g. Penicillin anaphylaxis), blood type (O+), and verified caregiver contact (Suresh Venkatesh `+91-9845012345`) without patient consent or tokens.
+    - Integrated with persistent hospital MongoDB clients (`hospClients` for ports 27017, 27018, 27019).
+    - Enforced RBAC allowing only clinical roles (`doctor`, `emergency`, `doctor_supervisor`, `hospital_admin`, `system_admin`).
+  - Implemented Break-Glass Declaration (`POST /consent/break-glass`):
+    - Validates mandatory clinical justification (minimum 10 characters).
+    - Issues 2-hour scoped emergency access token (`TOK-BG-*`) cached in memory (<50ms SLA).
+    - Dispatches real-time notifications to both patient and caregiver (`system_db.notifications`).
+    - Enforces friction rate limit: max 3 declarations / hour per clinician; 4th declaration returns HTTP 429 and logs `rate_limit_exceeded`.
+    - Inserts audit event with Contract `C-04` genesis back-link (`linked_event_id: '0x0000000000000000000000000000000000000000000000000000000000000000'`) and pre-computed `ml_features`.
+  - Enforced Sensitive Category Lockdown Invariant in `POST /records/fetch`:
+    - Updated `processRecord`: `const isGranted = (token.token_type !== 'break_glass') && Boolean(tokenScope.sensitive_categories?.[sensitiveCat]);`
+    - Guarantees psychiatric (`PSY`), reproductive (`SEX`), and substance abuse (`ETH`) records remain locked/omitted under break-glass tokens even if somehow granted in scope.
+    - Verified Lakshmi's general oncology records (breast carcinoma, chemotherapy, tamoxifen) are visible, while psychiatric records (adjustment disorder, sertraline, CBT counseling) are strictly omitted.
+    - Added access audit logging in `POST /records/fetch` capturing `total_sensitive_omitted` and `ml_features.is_break_glass`.
+  - Implemented Patient Audit Trail (`GET /audit/patient/:health_id`):
+    - Chronological event retrieval with patient privacy RBAC (patients can only view their own logs).
+  - Authored Verification Test Suite `scripts/test_phase3_breakglass.js` (67 assertions):
+    - Step 0: Authentication of personas (`DOC-EMERGENCY`, `DOC-3`, Lakshmi, Vikram).
+    - Step 1: Safe Harbor endpoint without consent (200, demographics, allergies, caregiver contact, RBAC).
+    - Step 2: Break-Glass validation & RBAC (missing health_id 400, short justification 400, patient role 403, unauthenticated 401).
+    - Step 3: Emergency declaration execution (200, 2h token, notifications delivered to patient & caregiver).
+    - Step 4: Token validation latency SLA benchmark (<50ms, achieved ~2.3ms).
+    - Step 5: Sensitive Category Lockdown Invariant verification (general records returned, psychiatric records strictly omitted).
+    - Step 6: Rate limiting friction (calls 1-3 pass, call 4 returns HTTP 429, doctor C has independent bucket).
+    - Step 7: Audit trail verification (`C-04` genesis hash link, `C-03` pre-computed features, privacy RBAC).
+  - Verification & Health:
+    - `npm run test:breakglass`: **67/67 PASS (100%)**
+    - `npm run test:phase2`: **48/48 PASS (100%)**
+    - `npm run test:patients`: **45/45 PASS (100%)**
+    - `npm run test:phase1`: **33/33 PASS (100%)**
+    - **Total: 193/193 assertions passing across all 4 test suites.**
+- **Deviations:** None.
+- **Decisions Made:**
+  - Standardized Safe Harbor emergency query to check local hospital MongoDB collections (`hospital1_db.patients`, etc.) directly with central registry fallback.
+  - Implemented idempotent cleanup in `test_phase3_breakglass.js` to ensure deterministic rate-limiting testing across repeated runs.
+- **Bugs Found & Resolved:**
+  - Fixed syntax error in `backend/index.js` where closing braces on `GET /records/patient` were displaced during endpoint addition.
+  - Corrected test runner persona identifier for Patient B to `vikram-shetty@test.com`.
+- **Next Task:** Proceed with Phase 3 Sprint 2 (Hardhat node setup, `AuditLog.sol` deployment, on-chain hash anchoring `C-04`/`C-05`).
+
 
 
 
