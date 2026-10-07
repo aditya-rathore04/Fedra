@@ -765,7 +765,81 @@
       justify-content: space-between;
       align-items: center;
       font-size: 11px;
-      color: #5A5A5A;
+    /* Break-Glass Emergency & Supervisor Styles */
+    .btn-emergency {
+      background: #DC2626;
+      border: 1px solid #EF4444;
+      color: #FFFFFF;
+      padding: 8px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .btn-emergency:hover {
+      background: #B91C1C;
+      border-color: #F87171;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+    }
+
+    .safe-harbor-card {
+      background: #111111;
+      border: 1px solid #332222;
+      border-left: 3px solid #EF4444;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+      font-size: 11px;
+    }
+    .safe-harbor-title {
+      color: #F87171;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .safe-harbor-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 6px;
+      color: #D4D4D4;
+    }
+
+    .supervisor-card {
+      background: #171717;
+      border: 1px solid #2E2E2E;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .supervisor-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #262626;
+      padding-bottom: 8px;
+    }
+    .sla-timer-badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border: 1px solid #F59E0B;
+      color: #FBBF24;
+      background: rgba(245, 158, 11, 0.1);
+      font-weight: 700;
+    }
+    .sla-timer-badge.breached {
+      border-color: #EF4444;
+      color: #F87171;
+      background: rgba(239, 68, 68, 0.1);
     }
   </style>
 </head>
@@ -790,6 +864,10 @@
           <span class="status-dot"></span>
           <span>3 Nodes Active</span>
         </div>
+        <button id="btnSupervisorQueue" class="node-pill" style="display: none; border-color: #F59E0B; color: #FBBF24; background: rgba(245, 158, 11, 0.1); cursor: pointer; font-weight: 600;" onclick="openSupervisorModal()">
+          <span>📋 Supervisor Queue</span>
+          <span id="supQueueBadge" style="background: #F59E0B; color: #000; padding: 1px 6px; font-size: 10px; font-weight: 700;">0</span>
+        </button>
         <button class="btn-logout" onclick="handleLogout()">Sign Out &rarr;</button>
       </div>
     </header>
@@ -885,6 +963,91 @@
       <div class="modal-actions">
         <button type="button" class="btn-cancel" onclick="closeRequestModal()">Cancel</button>
         <button type="button" id="btnSubmitRequest" class="btn-action-primary" onclick="submitAccessRequest()">Submit Access Request &rarr;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Declare Break-Glass Emergency -->
+  <div id="breakGlassModal" class="modal-backdrop">
+    <div class="modal-box" style="border-color: #EF4444; max-width: 580px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+        <span style="font-size: 18px;">🚨</span>
+        <h3 class="modal-h" style="color: #F87171; margin: 0;">Declare Break-Glass Emergency Access</h3>
+      </div>
+      <p class="modal-p" style="margin-bottom: 14px;">
+        Immediate emergency override to retrieve life-saving cross-hospital medical records without prior patient consent. 
+        <strong style="color: #F87171;">All actions are immutably logged to the cryptographic audit trail (Contract C-04).</strong>
+      </p>
+
+      <!-- Live Safe Harbor Preview -->
+      <div id="safeHarborContainer" class="safe-harbor-card">
+        <div class="safe-harbor-title">
+          <span>🛡️ Safe Harbor Patient Triage</span>
+          <span id="safeHarborLoading" style="color: #A3A3A3; font-size: 10px;">Loading triage data...</span>
+        </div>
+        <div id="safeHarborContent" class="safe-harbor-grid">
+          <div><strong>Critical Allergies:</strong> <span id="shAllergies" style="color: #F87171;">—</span></div>
+          <div><strong>Blood Group:</strong> <span id="shBloodType" style="color: #10B981;">—</span></div>
+          <div style="grid-column: 1 / -1;"><strong>Emergency Contact:</strong> <span id="shContact" style="color: #38BDF8;">—</span></div>
+        </div>
+      </div>
+
+      <label class="meta-label">Emergency Window Duration</label>
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px;">
+        <label style="border: 1px solid #383838; padding: 10px; font-size: 11px; cursor: pointer; background: #111; display: flex; flex-direction: column; gap: 4px;">
+          <input type="radio" name="bgDuration" value="2" checked style="margin-bottom: 4px;">
+          <strong>2 Hours</strong>
+          <span style="font-size: 10px; color: #8C8C8C;">Standard (Instant Token)</span>
+        </label>
+        <label style="border: 1px solid #383838; padding: 10px; font-size: 11px; cursor: pointer; background: #111; display: flex; flex-direction: column; gap: 4px;">
+          <input type="radio" name="bgDuration" value="4" style="margin-bottom: 4px;">
+          <strong>4 Hours</strong>
+          <span style="font-size: 10px; color: #8C8C8C;">2h Instant + Supervisor</span>
+        </label>
+        <label style="border: 1px solid #383838; padding: 10px; font-size: 11px; cursor: pointer; background: #111; display: flex; flex-direction: column; gap: 4px;">
+          <input type="radio" name="bgDuration" value="8" style="margin-bottom: 4px;">
+          <strong>8 Hours</strong>
+          <span style="font-size: 10px; color: #8C8C8C;">Polytrauma / Surgery</span>
+        </label>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <label class="meta-label">Clinical Justification (Mandatory • Min 10 chars)</label>
+        <span id="bgCharCount" style="font-size: 10px; color: #737373;">0 / 10 min</span>
+      </div>
+      <textarea id="bgJustification" class="purpose-textarea" placeholder="State immediate clinical rationale (e.g. Acute polytrauma resuscitation, sudden unconsciousness with suspected anaphylaxis...)" oninput="updateBgCharCount()" required></textarea>
+
+      <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid #7F1D1D; padding: 10px; margin-bottom: 20px; font-size: 11px; color: #FCA5A5; display: flex; gap: 8px;">
+        <span>⚠️</span>
+        <div>Patient and registered caregivers will receive real-time SMS/push emergency alerts. Sensitive psychiatric records remain locked down.</div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" onclick="closeBreakGlassModal()">Cancel</button>
+        <button type="button" id="btnSubmitBreakGlass" class="btn-emergency" onclick="submitBreakGlassDeclaration()">
+          🚨 Authorize Emergency Access &rarr;
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Supervisor Review Queue -->
+  <div id="supervisorModal" class="modal-backdrop">
+    <div class="modal-box" style="border-color: #F59E0B; max-width: 680px; width: 100%;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #292929; padding-bottom: 10px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 18px;">📋</span>
+          <h3 class="modal-h" style="color: #FBBF24; margin: 0;">Clinical Supervisor Review Queue</h3>
+        </div>
+        <button class="btn-cancel" style="padding: 4px 10px;" onclick="closeSupervisorModal()">Close ✕</button>
+      </div>
+
+      <p class="modal-p" style="margin-bottom: 16px;">
+        Pending break-glass emergency extensions and post-expiry reinstatement requests requiring supervisory authorization with 15-minute SLA.
+      </p>
+
+      <div id="supervisorTicketList" style="max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;">
+        <div style="text-align: center; color: #737373; padding: 30px; font-size: 12px;">Loading pending tickets...</div>
       </div>
     </div>
   </div>
@@ -998,13 +1161,20 @@
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await res.json();
+        const matchingBg = (data.break_glass_tokens || []).find(t => t.health_id === healthId);
         const matchingPolicy = (data.policies || []).find(p => p.health_id === healthId && p.active_token);
-        if (matchingPolicy) {
+
+        if (matchingBg) {
+          activeToken = matchingBg;
+          startBreakGlassTimer(matchingBg);
+        } else if (matchingPolicy) {
           activeToken = matchingPolicy.active_token;
           activeToken.scope = matchingPolicy.scope;
           activeToken.policy_id = matchingPolicy.policy_id;
+          stopBreakGlassTimer();
         } else {
           activeToken = null;
+          stopBreakGlassTimer();
         }
       } catch (err) {
         console.error('Error checking active consents:', err);
@@ -1019,18 +1189,48 @@
 
       let consentStatusHtml = '';
       if (activeToken) {
-        consentStatusHtml = `
-          <div class="consent-status-pill status-active">
-            <span class="status-dot"></span>
-            <span>Active Access Token (${activeToken.token_id.slice(0, 12)}...)</span>
-          </div>
-          <button class="btn-action-success" onclick="fetchFederatedRecords('${data.health_id}', '${activeToken.token_id}')">
-            ⚡ Fetch Clinical Records &rarr;
-          </button>
-          <button class="btn-cancel" style="border-color: #EF4444; color: #EF4444; font-size: 11px; padding: 7px 12px; cursor: pointer;" onclick="revokeActiveConsent('${activeToken.policy_id}', '${data.health_id}')" title="Revoke this token to re-test patient approval handshake">
-            🔄 Revoke Token (Re-test)
-          </button>
-        `;
+        if (activeToken.token_type === 'break_glass') {
+          if (activeToken.in_grace_period) {
+            consentStatusHtml = `
+              <div class="consent-status-pill" style="border-color: #F59E0B; background: rgba(245, 158, 11, 0.12); color: #FBBF24;">
+                <span style="display: inline-block; width: 6px; height: 6px; background: #F59E0B;"></span>
+                <span>⚠️ Grace Period (Read-Only) • <span id="bgCountdown">${formatSec(activeToken.grace_period_remaining_sec || 900)}</span></span>
+              </div>
+              <button class="btn-emergency" style="background: #D97706; border-color: #F59E0B;" onclick="promptReinstateToken('${activeToken.token_id}')">
+                🚨 Request Reinstatement &rarr;
+              </button>
+            `;
+          } else {
+            consentStatusHtml = `
+              <div class="consent-status-pill" style="border-color: #EF4444; background: rgba(239, 68, 68, 0.15); color: #FCA5A5;">
+                <span class="status-dot" style="background-color: #EF4444; box-shadow: 0 0 6px rgba(239, 68, 68, 0.8);"></span>
+                <span>🚨 Emergency Break-Glass • <span id="bgCountdown">--:--</span></span>
+              </div>
+              <button class="btn-action-success" onclick="fetchFederatedRecords('${data.health_id}', '${activeToken.token_id}')">
+                ⚡ Fetch Clinical Records &rarr;
+              </button>
+              <button class="btn-action-primary" style="background: #2563EB; border-color: #3B82F6;" onclick="requestTokenExtension('${activeToken.token_id}')" title="Request +1 Hour Extension via Automated Rule Engine">
+                ⚡ Extend (+1h)
+              </button>
+              <button class="btn-cancel" style="border-color: #EF4444; color: #EF4444; font-size: 11px; padding: 7px 12px; cursor: pointer;" onclick="revokeActiveConsent('${activeToken.policy_id || activeToken.token_id}', '${data.health_id}')" title="Revoke emergency access">
+                End Emergency
+              </button>
+            `;
+          }
+        } else {
+          consentStatusHtml = `
+            <div class="consent-status-pill status-active">
+              <span class="status-dot"></span>
+              <span>Active Access Token (${activeToken.token_id.slice(0, 12)}...)</span>
+            </div>
+            <button class="btn-action-success" onclick="fetchFederatedRecords('${data.health_id}', '${activeToken.token_id}')">
+              ⚡ Fetch Clinical Records &rarr;
+            </button>
+            <button class="btn-cancel" style="border-color: #EF4444; color: #EF4444; font-size: 11px; padding: 7px 12px; cursor: pointer;" onclick="revokeActiveConsent('${activeToken.policy_id}', '${data.health_id}')" title="Revoke this token to re-test patient approval handshake">
+              🔄 Revoke Token (Re-test)
+            </button>
+          `;
+        }
       } else if (activeRequestId) {
         consentStatusHtml = `
           <div class="consent-status-pill status-pending">
@@ -1038,6 +1238,9 @@
           </div>
           <button class="btn-action-primary" onclick="checkConsentHandshake('${data.health_id}')">
             🔄 Check Approval Status
+          </button>
+          <button class="btn-emergency" onclick="openBreakGlassModal('${data.health_id}', '${patientName}')">
+            🚨 Break-Glass Override &rarr;
           </button>
         `;
       } else {
@@ -1047,6 +1250,9 @@
           </div>
           <button class="btn-action-primary" onclick="openRequestModal('${data.health_id}', '${patientName}')">
             Request Record Access &rarr;
+          </button>
+          <button class="btn-emergency" onclick="openBreakGlassModal('${data.health_id}', '${patientName}')">
+            🚨 Declare Break-Glass Emergency &rarr;
           </button>
         `;
       }
@@ -1466,6 +1672,374 @@
         });
       }
     }
+
+    // ==========================================
+    // Phase 3 Sprint 2: Break-Glass & Supervisor UI Logic
+    // ==========================================
+
+    let targetBgHealthId = null;
+    let targetBgPatientName = null;
+    let bgCountdownInterval = null;
+
+    function formatSec(seconds) {
+      if (!seconds || seconds <= 0) return '00:00';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = Math.floor(seconds % 60);
+      if (h > 0) {
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      }
+      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    function startBreakGlassTimer(bgToken) {
+      if (bgCountdownInterval) clearInterval(bgCountdownInterval);
+      const expiresMs = new Date(bgToken.expires_at).getTime();
+
+      const tick = () => {
+        const now = Date.now();
+        const diffSec = Math.floor((expiresMs - now) / 1000);
+
+        if (diffSec <= 0) {
+          const graceDiffSec = Math.floor((expiresMs + 15 * 60 * 1000 - now) / 1000);
+          if (graceDiffSec > 0) {
+            bgToken.in_grace_period = true;
+            bgToken.grace_period_remaining_sec = graceDiffSec;
+            const el = document.getElementById('bgCountdown');
+            if (el) el.textContent = formatSec(graceDiffSec);
+          } else {
+            clearInterval(bgCountdownInterval);
+            activeToken = null;
+            if (currentDiscoveredData) renderResults(currentDiscoveredData);
+          }
+        } else {
+          const el = document.getElementById('bgCountdown');
+          if (el) el.textContent = formatSec(diffSec);
+        }
+      };
+
+      tick();
+      bgCountdownInterval = setInterval(tick, 1000);
+    }
+
+    function stopBreakGlassTimer() {
+      if (bgCountdownInterval) clearInterval(bgCountdownInterval);
+    }
+
+    // Modal: Open Break-Glass Emergency Modal with Safe Harbor inspection
+    async function openBreakGlassModal(healthId, patientName) {
+      targetBgHealthId = healthId;
+      targetBgPatientName = patientName;
+
+      document.getElementById('bgJustification').value = '';
+      updateBgCharCount();
+      document.getElementById('safeHarborLoading').style.display = 'inline';
+      document.getElementById('shAllergies').textContent = 'Loading...';
+      document.getElementById('shBloodType').textContent = 'Loading...';
+      document.getElementById('shContact').textContent = 'Loading...';
+
+      document.getElementById('breakGlassModal').style.display = 'flex';
+
+      try {
+        const res = await fetch(`${API_BASE}/patient/safe-harbor?health_id=${encodeURIComponent(healthId)}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        document.getElementById('safeHarborLoading').style.display = 'none';
+
+        if (res.ok) {
+          const allergies = data.safe_harbor?.critical_allergies?.join(', ') || 'No known critical drug allergies (NKDA)';
+          document.getElementById('shAllergies').textContent = allergies;
+          document.getElementById('shBloodType').textContent = data.demographics?.blood_type || 'Unknown';
+          const contact = data.safe_harbor?.emergency_contact;
+          document.getElementById('shContact').textContent = contact 
+            ? `${contact.name} (${contact.relation || 'Contact'}) • ${contact.phone || 'Phone on file'}`
+            : 'None on file';
+        } else {
+          document.getElementById('shAllergies').textContent = 'Unable to query safe harbor node';
+          document.getElementById('shBloodType').textContent = 'Unknown';
+          document.getElementById('shContact').textContent = 'Unknown';
+        }
+      } catch (e) {
+        document.getElementById('safeHarborLoading').style.display = 'none';
+        document.getElementById('shAllergies').textContent = 'Query timeout';
+      }
+    }
+
+    function closeBreakGlassModal() {
+      document.getElementById('breakGlassModal').style.display = 'none';
+    }
+
+    function updateBgCharCount() {
+      const val = document.getElementById('bgJustification').value.trim();
+      const countEl = document.getElementById('bgCharCount');
+      if (countEl) {
+        countEl.textContent = `${val.length} / 10 min`;
+        countEl.style.color = val.length >= 10 ? '#10B981' : '#F87171';
+      }
+    }
+
+    async function submitBreakGlassDeclaration() {
+      const justification = document.getElementById('bgJustification').value.trim();
+      if (justification.length < 10) {
+        alert('Mandatory Requirement: Please provide a clinical justification of at least 10 characters.');
+        return;
+      }
+
+      const durationRadio = document.querySelector('input[name="bgDuration"]:checked');
+      const durationHours = Number(durationRadio?.value) || 2;
+
+      const btn = document.getElementById('btnSubmitBreakGlass');
+      btn.disabled = true;
+      btn.textContent = 'Authorizing Emergency Access...';
+
+      try {
+        const res = await fetch(`${API_BASE}/consent/break-glass`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            health_id: targetBgHealthId,
+            justification: justification,
+            requested_duration_hrs: durationHours
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to authorize break-glass emergency.');
+        }
+
+        closeBreakGlassModal();
+
+        alert(`🚨 EMERGENCY BREAK-GLASS AUTHORIZED\n\nToken ID: ${data.token_id}\nEmergency Window: ${data.default_window_hrs} Hours\n\nPatient and caregiver emergency notifications dispatched.`);
+
+        await checkActiveConsentForPatient(targetBgHealthId);
+        if (currentDiscoveredData) {
+          renderResults(currentDiscoveredData);
+          if (activeToken) {
+            fetchFederatedRecords(targetBgHealthId, activeToken.token_id);
+          }
+        }
+
+      } catch (err) {
+        alert('Break-Glass Error: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚨 Authorize Emergency Access →';
+      }
+    }
+
+    async function requestTokenExtension(tokenId) {
+      const just = prompt('Clinical reason for +1 Hour extension:', 'Procedure ongoing in critical care unit.');
+      if (!just) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/consent/break-glass/extend`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            token_id: tokenId,
+            additional_hours: 1,
+            justification: just
+          })
+        });
+
+        const data = await res.json();
+        if (res.status === 200) {
+          alert('⚡ EXTENSION AUTO-APPROVED\n\nAutomated Rule Engine verified first-time routine extension.\nWindow extended by 1 hour.');
+          if (currentDiscoveredData) {
+            await checkActiveConsentForPatient(currentDiscoveredData.health_id);
+            renderResults(currentDiscoveredData);
+          }
+        } else if (res.status === 202) {
+          alert('📋 EXTENSION ROUTED TO SUPERVISOR\n\nTicket ID: ' + data.ticket_id + '\nEnqueued with 15-minute SLA.');
+        } else {
+          alert('Extension error: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        alert('Network error requesting extension: ' + e.message);
+      }
+    }
+
+    async function promptReinstateToken(tokenId) {
+      const just = prompt('Enter emergency clinical justification for reinstatement:', 'Sudden hemodynamic decompensation in observation unit.');
+      if (!just || just.length < 10) {
+        alert('Justification must be at least 10 characters.');
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/consent/break-glass/reinstate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            token_id: tokenId,
+            justification: just,
+            requested_hours: 2
+          })
+        });
+
+        const data = await res.json();
+        if (res.status === 202) {
+          alert(`📋 EMERGENCY REINSTATEMENT ENQUEUED\n\nTicket ID: ${data.ticket_id}\nSLA: 15 Minutes\nGrace remaining: ${data.grace_period_remaining_sec}s.\n\nPlease notify the on-call supervisor.`);
+          if (currentDiscoveredData) {
+            await checkActiveConsentForPatient(currentDiscoveredData.health_id);
+            renderResults(currentDiscoveredData);
+          }
+        } else {
+          alert('Reinstatement error: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        alert('Network error requesting reinstatement: ' + e.message);
+      }
+    }
+
+    // Supervisor Queue Logic
+    function checkSupervisorStatus() {
+      const isSupervisor = (user.role === 'doctor_supervisor' || user.role === 'hospital_admin' || user.role === 'system_admin' || user.userId === 'DOC-3' || user.userId === 'DOC-SUP-01');
+      const btn = document.getElementById('btnSupervisorQueue');
+      if (btn && isSupervisor) {
+        btn.style.display = 'inline-flex';
+        pollSupervisorQueueCount();
+      }
+    }
+
+    async function pollSupervisorQueueCount() {
+      try {
+        const res = await fetch(`${API_BASE}/supervisor/queue`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const badge = document.getElementById('supQueueBadge');
+          if (badge) badge.textContent = data.count || 0;
+        }
+      } catch (e) {}
+    }
+
+    function openSupervisorModal() {
+      document.getElementById('supervisorModal').style.display = 'flex';
+      loadSupervisorQueue();
+    }
+
+    function closeSupervisorModal() {
+      document.getElementById('supervisorModal').style.display = 'none';
+    }
+
+    async function loadSupervisorQueue() {
+      const listEl = document.getElementById('supervisorTicketList');
+      listEl.innerHTML = '<div style="text-align: center; color: #737373; padding: 20px; font-size: 12px;">Querying pending tickets...</div>';
+
+      try {
+        const res = await fetch(`${API_BASE}/supervisor/queue`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('Failed to load supervisor queue');
+        const data = await res.json();
+        const tickets = data.tickets || [];
+
+        const badge = document.getElementById('supQueueBadge');
+        if (badge) badge.textContent = tickets.length;
+
+        if (tickets.length === 0) {
+          listEl.innerHTML = `
+            <div style="background: #111; border: 1px dashed #383838; padding: 30px; text-align: center; color: #8C8C8C;">
+              <div style="font-size: 18px; margin-bottom: 6px;">✓</div>
+              <div style="font-weight: 600; color: #FFFFFF;">Zero Pending Escalations</div>
+              <div style="font-size: 11px; margin-top: 4px;">All break-glass emergency windows and extensions are within standard parameters.</div>
+            </div>
+          `;
+          return;
+        }
+
+        listEl.innerHTML = tickets.map(t => {
+          const slaSec = t.sla_remaining_sec || 0;
+          const isBreached = t.sla_breached;
+          const timerDisplay = isBreached ? '⚠️ SLA BREACHED' : `⏱️ SLA: ${formatSec(slaSec)}`;
+
+          return `
+            <div class="supervisor-card">
+              <div class="supervisor-card-header">
+                <div>
+                  <span style="font-weight: 700; color: #FBBF24; font-size: 12px;">${t.ticket_type === 'grace_reinstatement' ? '🚨 REINSTATEMENT' : '⚡ EXTENSION'}</span>
+                  <span style="font-size: 11px; color: #737373; margin-left: 6px;">${t.ticket_id}</span>
+                </div>
+                <span class="sla-timer-badge ${isBreached ? 'breached' : ''}">${timerDisplay}</span>
+              </div>
+
+              <div style="font-size: 11px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; color: #D4D4D4;">
+                <div><strong>Doctor:</strong> ${escapeHtml(t.doctor_name || t.doctor_id)}</div>
+                <div><strong>Hospital:</strong> ${escapeHtml(t.institution_id)}</div>
+                <div><strong>Patient:</strong> ${escapeHtml(t.patient_name || t.health_id)}</div>
+                <div><strong>Requested:</strong> +${t.requested_hours} Hours</div>
+              </div>
+
+              <div style="background: #0D0D0D; border: 1px solid #262626; padding: 8px; font-size: 11px; color: #A3A3A3;">
+                <strong style="color: #FFFFFF;">Clinical Rationale:</strong> ${escapeHtml(t.justification)}
+              </div>
+
+              <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;">
+                <button type="button" class="btn-cancel" style="border-color: #EF4444; color: #EF4444;" onclick="submitSupervisorDecision('${t.ticket_id}', 'denied')">
+                  ✕ Deny
+                </button>
+                <button type="button" class="btn-emergency" style="background: #10B981; border-color: #059669; color: #000; padding: 6px 12px; font-size: 11px;" onclick="submitSupervisorDecision('${t.ticket_id}', 'approved')">
+                  ✓ Approve Extension
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+      } catch (e) {
+        listEl.innerHTML = `<div class="alert alert-error" style="display:block;">${e.message}</div>`;
+      }
+    }
+
+    async function submitSupervisorDecision(ticketId, decision) {
+      const notes = prompt(`Supervisor review notes for decision (${decision}):`, decision === 'approved' ? 'Approved based on emergency trauma indication.' : 'Denied.');
+      if (notes === null) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/supervisor/review`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            ticket_id: ticketId,
+            decision: decision,
+            supervisor_notes: notes
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          alert(`Supervisor review recorded successfully (${decision.toUpperCase()}).\nChained Event: ${data.linked_event_id || 'Contract C-04 linked'}`);
+          loadSupervisorQueue();
+          if (currentDiscoveredData) {
+            await checkActiveConsentForPatient(currentDiscoveredData.health_id);
+            renderResults(currentDiscoveredData);
+          }
+        } else {
+          alert('Review failed: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        alert('Network error: ' + e.message);
+      }
+    }
+
+    // Initialize supervisor status check on page load
+    checkSupervisorStatus();
   </script>
 </body>
 </html>

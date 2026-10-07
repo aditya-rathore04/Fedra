@@ -112,8 +112,22 @@ async function getValidatedToken(tokenId) {
   // 1. Check in-memory cache (<1ms response)
   const cached = tokenCache.get(tokenId);
   if (cached) {
-    if (cached.status === 'active' && new Date(cached.expires_at) > now) {
-      return cached;
+    if (['active', 'grace_period'].includes(cached.status)) {
+      if (new Date(cached.expires_at) > now) {
+        return cached;
+      }
+      // Check if break-glass within 15-minute grace period (Decision D-07)
+      if (cached.token_type === 'break_glass') {
+        const elapsedMs = now.getTime() - new Date(cached.expires_at).getTime();
+        if (elapsedMs <= 15 * 60 * 1000) {
+          const graceRemainingSec = Math.max(0, Math.floor((15 * 60 * 1000 - elapsedMs) / 1000));
+          return {
+            ...cached,
+            in_grace_period: true,
+            grace_period_remaining_sec: graceRemainingSec
+          };
+        }
+      }
     }
     tokenCache.delete(tokenId);
     return null;
@@ -121,9 +135,24 @@ async function getValidatedToken(tokenId) {
 
   // 2. Database lookup fallback
   const tokenDoc = await systemDb.collection('access_tokens').findOne({ token_id: tokenId });
-  if (tokenDoc && tokenDoc.status === 'active' && new Date(tokenDoc.expires_at) > now) {
-    cacheToken(tokenDoc);
-    return tokenDoc;
+  if (tokenDoc && ['active', 'grace_period'].includes(tokenDoc.status)) {
+    if (new Date(tokenDoc.expires_at) > now) {
+      cacheToken(tokenDoc);
+      return tokenDoc;
+    }
+    if (tokenDoc.token_type === 'break_glass') {
+      const elapsedMs = now.getTime() - new Date(tokenDoc.expires_at).getTime();
+      if (elapsedMs <= 15 * 60 * 1000) {
+        const graceRemainingSec = Math.max(0, Math.floor((15 * 60 * 1000 - elapsedMs) / 1000));
+        const graceToken = {
+          ...tokenDoc,
+          in_grace_period: true,
+          grace_period_remaining_sec: graceRemainingSec
+        };
+        cacheToken(graceToken);
+        return graceToken;
+      }
+    }
   }
   return null;
 }
@@ -299,6 +328,29 @@ async function startServer() {
       await systemDb.collection('audit_events').createIndex({ 'actor.id': 1, timestamp: -1 });
       await systemDb.collection('audit_events').createIndex({ event_id: 1 }, { unique: true });
       await systemDb.collection('audit_events').createIndex({ event_type: 1, timestamp: -1 });
+
+      // Phase 3 Sprint 2: Supervisor Review Engine Indexes
+      await systemDb.collection('supervisor_tickets').createIndex({ ticket_id: 1 }, { unique: true });
+      await systemDb.collection('supervisor_tickets').createIndex({ status: 1, created_at: -1 });
+      await systemDb.collection('supervisor_tickets').createIndex({ token_id: 1 });
+      await systemDb.collection('supervisor_tickets').createIndex({ doctor_id: 1 });
+      await systemDb.collection('supervisor_tickets').createIndex({ sla_expires_at: 1 });
+
+      // Seed default clinical supervisor persona if not present
+      const supExists = await systemDb.collection('users').findOne({ email: 'supervisor@test.com' });
+      if (!supExists) {
+        const hash = await bcrypt.hash('password123', 10);
+        await systemDb.collection('users').insertOne({
+          user_id: 'DOC-SUP-01',
+          role: 'doctor_supervisor',
+          email: 'supervisor@test.com',
+          name: 'Dr. K. S. Venkatesh (Clinical Supervisor)',
+          institution_id: 'HOSP-1',
+          password_hash: hash,
+          status: 'active',
+          created_at: new Date()
+        });
+      }
 
       // Non-blocking connection to local hospital databases for safe harbor queries
       for (const [hId, hClient] of Object.entries(hospClients)) {
@@ -872,7 +924,50 @@ app.get('/consent/active', verifyJWT, async (req, res) => {
       } : null
     }));
 
-    res.json({ count: enriched.length, policies: enriched });
+    // Also include active / grace-period break-glass tokens for clinicians and patients
+    const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
+    const bgFilter = {
+      token_type: 'break_glass',
+      status: { $in: ['active', 'grace_period'] },
+      expires_at: { $gt: fifteenMinsAgo }
+    };
+    if (req.user.role === 'patient') {
+      let patHealthId = req.user.health_id;
+      if (!patHealthId) {
+        const pat = await systemDb.collection('users').findOne({ user_id: req.user.user_id });
+        patHealthId = pat?.health_id;
+      }
+      bgFilter.health_id = patHealthId;
+    } else {
+      bgFilter.doctor_id = req.user.user_id;
+    }
+
+    const breakGlassTokens = await systemDb.collection('access_tokens')
+      .find(bgFilter)
+      .sort({ expires_at: -1 })
+      .toArray();
+
+    const formattedBgTokens = breakGlassTokens.map(t => {
+      const isGrace = new Date(t.expires_at) <= new Date();
+      const graceRemainingSec = isGrace ? Math.max(0, Math.floor((new Date(t.expires_at).getTime() + 15 * 60 * 1000 - Date.now()) / 1000)) : 0;
+      return {
+        token_id: t.token_id,
+        health_id: t.health_id,
+        patient_name: t.patient_name,
+        doctor_id: t.doctor_id,
+        token_type: 'break_glass',
+        expires_at: t.expires_at,
+        in_grace_period: isGrace,
+        grace_period_remaining_sec: graceRemainingSec,
+        scope: t.scope
+      };
+    });
+
+    res.json({
+      count: enriched.length,
+      policies: enriched,
+      break_glass_tokens: formattedBgTokens
+    });
   } catch (err) {
     console.error('Active consent fetch error:', err);
     res.status(500).json({ error: 'Internal server error retrieving active consents' });
@@ -1243,6 +1338,52 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
       });
     }
 
+    // Branch A: If requested duration exceeds 2 hours upfront, enqueue supervisor ticket immediately
+    let upfrontTicketId = null;
+    if (requestedDuration > 2) {
+      upfrontTicketId = `TICK-UPFRONT-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+      const upfrontTicket = {
+        ticket_id: upfrontTicketId,
+        token_id: tokenId,
+        event_id: eventId,
+        health_id,
+        patient_name: patientName,
+        doctor_id: req.user.user_id,
+        doctor_name: req.user.name || req.user.user_id,
+        institution_id: req.user.institution_id || 'HOSP-EMERGENCY',
+        ticket_type: 'upfront_extension',
+        requested_hours: requestedDuration - defaultWindowHrs,
+        current_expires_at: expiresAt,
+        justification: justification.trim(),
+        status: 'pending_supervisor',
+        created_at: new Date(),
+        sla_expires_at: new Date(Date.now() + 15 * 60 * 1000), // 15-minute SLA
+        reviewed_by: null,
+        reviewed_at: null,
+        supervisor_notes: null
+      };
+      await systemDb.collection('supervisor_tickets').insertOne(upfrontTicket);
+
+      notifications.push({
+        notification_id: `NOTIF-SUP-${crypto.randomUUID()}`,
+        recipient_id: 'SUPERVISOR_QUEUE',
+        recipient_role: 'doctor_supervisor',
+        notification_type: 'supervisor_ticket_created',
+        payload: {
+          ticket_id: upfrontTicketId,
+          ticket_type: 'upfront_extension',
+          token_id: tokenId,
+          health_id,
+          patient_name: patientName,
+          doctor_id: req.user.user_id,
+          requested_hours: requestedDuration - defaultWindowHrs,
+          justification: justification.trim()
+        },
+        status: 'delivered',
+        created_at: new Date()
+      });
+    }
+
     await systemDb.collection('notifications').insertMany(notifications);
 
     // 5. Immutable Audit Event (Contract C-04 hash chaining genesis)
@@ -1262,6 +1403,7 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
         token_id: tokenId,
         default_window_hrs: defaultWindowHrs,
         requested_duration_hrs: requestedDuration,
+        upfront_ticket_id: upfrontTicketId,
         caregiver_alerted: !!emergencyContact
       },
       blockchain_tx_hash: null,
@@ -1287,6 +1429,7 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
     res.status(200).json({
       token_id: tokenId,
       event_id: eventId,
+      ticket_id: upfrontTicketId,
       token_type: 'break_glass',
       default_window_hrs: defaultWindowHrs,
       expires_at: expiresAt.toISOString(),
@@ -1303,6 +1446,572 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
   } catch (err) {
     console.error('Break-glass declaration error:', err);
     res.status(500).json({ error: 'Internal server error processing break-glass declaration' });
+  }
+});
+
+// Branch B: Pre-Expiry Extension (POST /consent/break-glass/extend)
+// Layer 1 Automated Rule Engine + Layer 2 Supervisor Escalation
+app.post('/consent/break-glass/extend', verifyJWT, requireRole(['doctor', 'doctor_supervisor', 'emergency', 'system_admin']), async (req, res) => {
+  const { token_id, additional_hours, justification } = req.body;
+
+  if (!token_id) {
+    return res.status(400).json({ error: 'token_id is mandatory for emergency extension' });
+  }
+
+  const hoursToAdd = Number(additional_hours) || 1;
+  if (hoursToAdd <= 0) {
+    return res.status(400).json({ error: 'additional_hours must be a positive number' });
+  }
+
+  if (!justification || typeof justification !== 'string' || justification.trim().length < 10) {
+    return res.status(400).json({
+      error: 'Valid clinical justification is mandatory for extension request (minimum 10 characters).'
+    });
+  }
+
+  try {
+    const token = await systemDb.collection('access_tokens').findOne({ token_id });
+    if (!token || token.token_type !== 'break_glass') {
+      return res.status(404).json({ error: 'Valid break-glass access token not found' });
+    }
+
+    const now = new Date();
+    if (token.status !== 'active' || new Date(token.expires_at) <= now) {
+      return res.status(400).json({
+        error: 'Token is already expired or inactive. If within the 15-minute grace period, use /consent/break-glass/reinstate.'
+      });
+    }
+
+    // Check doctor misuse flags in audit trail
+    const misuseCount = await systemDb.collection('audit_events').countDocuments({
+      'actor.id': req.user.user_id,
+      event_type: { $in: ['rate_limit_exceeded', 'break_glass_flagged_misuse', 'suspicious_activity'] }
+    });
+
+    const isSameDoctor = (req.user.user_id === token.doctor_id);
+    const isFirstExtension = ((token.break_glass_context?.extension_history?.length || 0) === 0);
+    const isStandardDuration = (hoursToAdd <= 2);
+    const hasZeroMisuseFlags = (misuseCount === 0);
+
+    // Layer 1 Automated Rule Engine: Auto-approves routine extensions (<=2h, 1st extension, 0 flags)
+    if (isSameDoctor && isFirstExtension && isStandardDuration && hasZeroMisuseFlags) {
+      const currentExpiry = new Date(token.expires_at);
+      const newExpiresAt = new Date(currentExpiry.getTime() + hoursToAdd * 3600 * 1000);
+      const extensionEventId = `EVT-EXT-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+      
+      // Contract C-04 Cryptographic Hash Chaining
+      const previousEventId = token.break_glass_context?.event_id || token.token_id;
+      const linkedEventId = '0x' + crypto.createHash('sha256').update(previousEventId).digest('hex');
+
+      const extensionEntry = {
+        event_id: extensionEventId,
+        hours_added: hoursToAdd,
+        approved_by: 'automated_rule_engine',
+        justification: justification.trim(),
+        timestamp: new Date()
+      };
+
+      await systemDb.collection('access_tokens').updateOne(
+        { token_id },
+        {
+          $set: {
+            expires_at: newExpiresAt,
+            'break_glass_context.event_id': extensionEventId,
+            'break_glass_context.extension_request_status': 'auto_approved'
+          },
+          $push: {
+            'break_glass_context.extension_history': extensionEntry
+          }
+        }
+      );
+
+      const updatedToken = await systemDb.collection('access_tokens').findOne({ token_id });
+      cacheToken(updatedToken);
+
+      // Chained Audit Event (Contract C-04)
+      const auditEvent = {
+        event_id: extensionEventId,
+        event_type: 'break_glass_extended',
+        timestamp: new Date(),
+        actor: {
+          id: req.user.user_id,
+          role: req.user.role,
+          institution_id: req.user.institution_id || token.institution_id
+        },
+        subject_health_id: token.health_id,
+        linked_event_id: linkedEventId,
+        metadata: {
+          token_id,
+          additional_hours: hoursToAdd,
+          justification: justification.trim(),
+          approval_type: 'automated_rule_engine',
+          previous_expires_at: currentExpiry.toISOString(),
+          new_expires_at: newExpiresAt.toISOString()
+        },
+        blockchain_tx_hash: null,
+        ml_features: {
+          hour_of_day: new Date().getHours(),
+          day_of_week: new Date().getDay(),
+          is_outside_shift_hours: (new Date().getHours() < 7 || new Date().getHours() >= 21),
+          is_weekend: (new Date().getDay() === 0 || new Date().getDay() === 6),
+          has_declared_clinical_rel: false,
+          is_break_glass: true,
+          sensitive_category_accessed: false,
+          categories_accessed_count: 5,
+          records_accessed_last_hour: 1,
+          records_accessed_last_day: 1,
+          unique_patients_last_hour: 1,
+          deviation_from_baseline: 0.0
+        }
+      };
+      await systemDb.collection('audit_events').insertOne(auditEvent);
+
+      return res.status(200).json({
+        status: 'auto_approved',
+        token_id,
+        event_id: extensionEventId,
+        hours_extended: hoursToAdd,
+        new_expires_at: newExpiresAt.toISOString(),
+        linked_event_id: linkedEventId,
+        message: 'Emergency access extended successfully by automated rule engine.'
+      });
+    }
+
+    // Layer 2 Supervisor Escalation: Non-standard request enqueued with 15-minute SLA
+    const ticketId = `TICK-EXT-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+    const escalationReason = !isStandardDuration 
+      ? 'duration_exceeds_auto_threshold_2h' 
+      : (!isFirstExtension ? 'repeated_extension_request' : 'misuse_flags_or_clinician_mismatch');
+
+    const ticketDoc = {
+      ticket_id: ticketId,
+      token_id,
+      event_id: token.break_glass_context?.event_id,
+      health_id: token.health_id,
+      patient_name: token.patient_name,
+      doctor_id: req.user.user_id,
+      doctor_name: req.user.name || req.user.user_id,
+      institution_id: req.user.institution_id || token.institution_id,
+      ticket_type: 'pre_expiry_extension',
+      requested_hours: hoursToAdd,
+      current_expires_at: token.expires_at,
+      justification: justification.trim(),
+      escalation_reason: escalationReason,
+      status: 'pending_supervisor',
+      created_at: new Date(),
+      sla_expires_at: new Date(Date.now() + 15 * 60 * 1000), // 15-minute SLA
+      reviewed_by: null,
+      reviewed_at: null,
+      supervisor_notes: null
+    };
+
+    await systemDb.collection('supervisor_tickets').insertOne(ticketDoc);
+
+    await systemDb.collection('access_tokens').updateOne(
+      { token_id },
+      { $set: { 'break_glass_context.extension_request_status': 'pending_supervisor' } }
+    );
+
+    await systemDb.collection('notifications').insertOne({
+      notification_id: `NOTIF-SUP-${crypto.randomUUID()}`,
+      recipient_id: 'SUPERVISOR_QUEUE',
+      recipient_role: 'doctor_supervisor',
+      notification_type: 'supervisor_ticket_created',
+      payload: {
+        ticket_id: ticketId,
+        ticket_type: 'pre_expiry_extension',
+        token_id,
+        health_id: token.health_id,
+        patient_name: token.patient_name,
+        doctor_id: req.user.user_id,
+        requested_hours: hoursToAdd,
+        justification: justification.trim(),
+        escalation_reason: escalationReason
+      },
+      status: 'delivered',
+      created_at: new Date()
+    });
+
+    return res.status(202).json({
+      status: 'pending_supervisor',
+      ticket_id: ticketId,
+      token_id,
+      requested_hours: hoursToAdd,
+      sla_minutes: 15,
+      escalation_reason: escalationReason,
+      message: 'Extension request requires supervisor escalation. Enqueued in on-call supervisor queue with 15-minute SLA.'
+    });
+
+  } catch (err) {
+    console.error('Break-glass extension error:', err);
+    res.status(500).json({ error: 'Internal server error processing break-glass extension' });
+  }
+});
+
+// Branch C: Reinstatement during 15-Minute Grace Period (POST /consent/break-glass/reinstate)
+// Decision D-07 Compliance
+app.post('/consent/break-glass/reinstate', verifyJWT, requireRole(['doctor', 'doctor_supervisor', 'emergency', 'system_admin']), async (req, res) => {
+  const { token_id, justification, requested_hours } = req.body;
+
+  if (!token_id) {
+    return res.status(400).json({ error: 'token_id is mandatory for emergency reinstatement' });
+  }
+
+  if (!justification || typeof justification !== 'string' || justification.trim().length < 10) {
+    return res.status(400).json({
+      error: 'Valid clinical justification is mandatory for emergency reinstatement (minimum 10 characters).'
+    });
+  }
+
+  const hours = Number(requested_hours) || 2;
+  if (hours <= 0) {
+    return res.status(400).json({ error: 'requested_hours must be a positive number' });
+  }
+
+  try {
+    const token = await systemDb.collection('access_tokens').findOne({ token_id });
+    if (!token || token.token_type !== 'break_glass') {
+      return res.status(404).json({ error: 'Valid break-glass access token not found' });
+    }
+
+    const now = new Date();
+    const tokenExpiry = new Date(token.expires_at);
+
+    if (now < tokenExpiry) {
+      return res.status(400).json({
+        error: 'Token is still active and has not expired. Use /consent/break-glass/extend instead.'
+      });
+    }
+
+    const elapsedMs = now.getTime() - tokenExpiry.getTime();
+    const GRACE_PERIOD_MS = 15 * 60 * 1000;
+
+    if (elapsedMs > GRACE_PERIOD_MS) {
+      return res.status(410).json({
+        error: 'The 15-minute grace period has elapsed. Token cannot be reinstated; clinician must declare a new emergency break-glass.'
+      });
+    }
+
+    const remainingGraceSec = Math.max(0, Math.floor((GRACE_PERIOD_MS - elapsedMs) / 1000));
+    const ticketId = `TICK-REINSTATE-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+
+    const ticketDoc = {
+      ticket_id: ticketId,
+      token_id,
+      event_id: token.break_glass_context?.event_id,
+      health_id: token.health_id,
+      patient_name: token.patient_name,
+      doctor_id: req.user.user_id,
+      doctor_name: req.user.name || req.user.user_id,
+      institution_id: req.user.institution_id || token.institution_id,
+      ticket_type: 'grace_reinstatement',
+      requested_hours: hours,
+      current_expires_at: tokenExpiry,
+      justification: justification.trim(),
+      status: 'pending_supervisor',
+      created_at: new Date(),
+      sla_expires_at: new Date(Date.now() + 15 * 60 * 1000), // 15-minute SLA
+      reviewed_by: null,
+      reviewed_at: null,
+      supervisor_notes: null
+    };
+
+    await systemDb.collection('supervisor_tickets').insertOne(ticketDoc);
+
+    await systemDb.collection('access_tokens').updateOne(
+      { token_id },
+      {
+        $set: {
+          'break_glass_context.extension_request_status': 'pending_supervisor',
+          'break_glass_context.grace_period_started_at': tokenExpiry
+        }
+      }
+    );
+
+    // High-priority notification to supervisor queue
+    await systemDb.collection('notifications').insertOne({
+      notification_id: `NOTIF-REINSTATE-${crypto.randomUUID()}`,
+      recipient_id: 'SUPERVISOR_QUEUE',
+      recipient_role: 'doctor_supervisor',
+      notification_type: 'emergency_reinstatement_requested',
+      payload: {
+        ticket_id: ticketId,
+        ticket_type: 'grace_reinstatement',
+        token_id,
+        health_id: token.health_id,
+        patient_name: token.patient_name,
+        doctor_id: req.user.user_id,
+        grace_remaining_sec: remainingGraceSec,
+        justification: justification.trim()
+      },
+      status: 'delivered',
+      created_at: new Date()
+    });
+
+    res.status(202).json({
+      status: 'pending_supervisor',
+      ticket_id: ticketId,
+      token_id,
+      grace_period_remaining_sec: remainingGraceSec,
+      sla_minutes: 15,
+      message: 'Emergency reinstatement enqueued with highest priority in supervisor review queue.'
+    });
+
+  } catch (err) {
+    console.error('Break-glass reinstatement error:', err);
+    res.status(500).json({ error: 'Internal server error processing break-glass reinstatement' });
+  }
+});
+
+// Supervisor Review Queue (GET /supervisor/queue)
+app.get('/supervisor/queue', verifyJWT, requireRole(['doctor_supervisor', 'hospital_admin', 'system_admin', 'admin']), async (req, res) => {
+  try {
+    const filter = req.query.status === 'all' ? {} : { status: 'pending_supervisor' };
+    const tickets = await systemDb.collection('supervisor_tickets')
+      .find(filter)
+      .sort({ sla_expires_at: 1 })
+      .toArray();
+
+    const now = Date.now();
+    const enrichedTickets = tickets.map(ticket => {
+      const slaRemainingMs = new Date(ticket.sla_expires_at).getTime() - now;
+      return {
+        ...ticket,
+        sla_remaining_sec: Math.max(0, Math.floor(slaRemainingMs / 1000)),
+        sla_breached: slaRemainingMs < 0
+      };
+    });
+
+    res.json({
+      count: enrichedTickets.length,
+      tickets: enrichedTickets
+    });
+  } catch (err) {
+    console.error('Supervisor queue query error:', err);
+    res.status(500).json({ error: 'Internal server error retrieving supervisor queue' });
+  }
+});
+
+// Supervisor Review Decision (POST /supervisor/review)
+app.post('/supervisor/review', verifyJWT, requireRole(['doctor_supervisor', 'hospital_admin', 'system_admin', 'admin']), async (req, res) => {
+  const { ticket_id, decision, supervisor_notes } = req.body;
+
+  if (!ticket_id || !decision || !['approved', 'denied'].includes(decision)) {
+    return res.status(400).json({ error: 'ticket_id and decision ("approved" or "denied") are mandatory' });
+  }
+
+  try {
+    const ticket = await systemDb.collection('supervisor_tickets').findOne({ ticket_id });
+    if (!ticket) {
+      return res.status(404).json({ error: `Supervisor ticket '${ticket_id}' not found` });
+    }
+
+    if (ticket.status !== 'pending_supervisor') {
+      return res.status(409).json({ error: `Ticket '${ticket_id}' has already been reviewed (status: ${ticket.status})` });
+    }
+
+    const token = await systemDb.collection('access_tokens').findOne({ token_id: ticket.token_id });
+    if (!token) {
+      return res.status(404).json({ error: `Associated access token '${ticket.token_id}' not found` });
+    }
+
+    const reviewEventId = `EVT-SUP-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+    const previousEventId = ticket.event_id || token.break_glass_context?.event_id || token.token_id;
+    const linkedEventId = '0x' + crypto.createHash('sha256').update(previousEventId).digest('hex');
+
+    if (decision === 'approved') {
+      let newExpiresAt;
+      if (ticket.ticket_type === 'grace_reinstatement') {
+        newExpiresAt = new Date(Date.now() + ticket.requested_hours * 3600 * 1000);
+      } else {
+        const baseTime = new Date(token.expires_at) > new Date() ? new Date(token.expires_at).getTime() : Date.now();
+        newExpiresAt = new Date(baseTime + ticket.requested_hours * 3600 * 1000);
+      }
+
+      await systemDb.collection('access_tokens').updateOne(
+        { token_id: token.token_id },
+        {
+          $set: {
+            status: 'active',
+            expires_at: newExpiresAt,
+            'break_glass_context.event_id': reviewEventId,
+            'break_glass_context.extension_request_status': 'approved',
+            'break_glass_context.reinstated_at': ticket.ticket_type === 'grace_reinstatement' ? new Date() : (token.break_glass_context?.reinstated_at || null)
+          },
+          $push: {
+            'break_glass_context.extension_history': {
+              event_id: reviewEventId,
+              ticket_id: ticket.ticket_id,
+              hours_added: ticket.requested_hours,
+              approved_by: req.user.user_id,
+              supervisor_notes: supervisor_notes || 'Approved by clinical supervisor',
+              timestamp: new Date()
+            }
+          }
+        }
+      );
+
+      const updatedToken = await systemDb.collection('access_tokens').findOne({ token_id: token.token_id });
+      cacheToken(updatedToken);
+
+      await systemDb.collection('supervisor_tickets').updateOne(
+        { ticket_id },
+        {
+          $set: {
+            status: 'approved',
+            reviewed_by: req.user.user_id,
+            reviewed_at: new Date(),
+            supervisor_notes: supervisor_notes || 'Approved by clinical supervisor',
+            resulting_event_id: reviewEventId
+          }
+        }
+      );
+
+      // Chained Audit Event (Contract C-04)
+      await systemDb.collection('audit_events').insertOne({
+        event_id: reviewEventId,
+        event_type: 'supervisor_break_glass_approved',
+        timestamp: new Date(),
+        actor: {
+          id: req.user.user_id,
+          role: req.user.role,
+          institution_id: req.user.institution_id || 'HOSP-SUPERVISOR'
+        },
+        subject_health_id: ticket.health_id,
+        linked_event_id: linkedEventId,
+        metadata: {
+          ticket_id,
+          token_id: ticket.token_id,
+          ticket_type: ticket.ticket_type,
+          requested_hours: ticket.requested_hours,
+          new_expires_at: newExpiresAt.toISOString(),
+          supervisor_notes: supervisor_notes || null
+        },
+        blockchain_tx_hash: null,
+        ml_features: {
+          hour_of_day: new Date().getHours(),
+          day_of_week: new Date().getDay(),
+          is_outside_shift_hours: (new Date().getHours() < 7 || new Date().getHours() >= 21),
+          is_weekend: (new Date().getDay() === 0 || new Date().getDay() === 6),
+          has_declared_clinical_rel: false,
+          is_break_glass: true,
+          sensitive_category_accessed: false,
+          categories_accessed_count: 5,
+          records_accessed_last_hour: 1,
+          records_accessed_last_day: 1,
+          unique_patients_last_hour: 1,
+          deviation_from_baseline: 0.0
+        }
+      });
+
+      // Notify clinician of approval
+      await systemDb.collection('notifications').insertOne({
+        notification_id: `NOTIF-${crypto.randomUUID()}`,
+        recipient_id: ticket.doctor_id,
+        recipient_role: 'doctor',
+        notification_type: 'supervisor_ticket_approved',
+        payload: {
+          ticket_id,
+          token_id: ticket.token_id,
+          new_expires_at: newExpiresAt.toISOString(),
+          reviewed_by: req.user.user_id,
+          notes: supervisor_notes || null
+        },
+        status: 'delivered',
+        created_at: new Date()
+      });
+
+      return res.status(200).json({
+        ticket_id,
+        status: 'approved',
+        token_id: ticket.token_id,
+        new_expires_at: newExpiresAt.toISOString(),
+        linked_event_id: linkedEventId,
+        reviewed_by: req.user.user_id
+      });
+
+    } else {
+      // Decision === 'denied'
+      await systemDb.collection('supervisor_tickets').updateOne(
+        { ticket_id },
+        {
+          $set: {
+            status: 'denied',
+            reviewed_by: req.user.user_id,
+            reviewed_at: new Date(),
+            supervisor_notes: supervisor_notes || 'Denied by clinical supervisor'
+          }
+        }
+      );
+
+      await systemDb.collection('access_tokens').updateOne(
+        { token_id: ticket.token_id },
+        { $set: { 'break_glass_context.extension_request_status': 'denied' } }
+      );
+
+      const denyEventId = `EVT-DENY-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+      await systemDb.collection('audit_events').insertOne({
+        event_id: denyEventId,
+        event_type: 'supervisor_break_glass_denied',
+        timestamp: new Date(),
+        actor: {
+          id: req.user.user_id,
+          role: req.user.role,
+          institution_id: req.user.institution_id || 'HOSP-SUPERVISOR'
+        },
+        subject_health_id: ticket.health_id,
+        linked_event_id: linkedEventId,
+        metadata: {
+          ticket_id,
+          token_id: ticket.token_id,
+          ticket_type: ticket.ticket_type,
+          supervisor_notes: supervisor_notes || null
+        },
+        blockchain_tx_hash: null,
+        ml_features: {
+          hour_of_day: new Date().getHours(),
+          day_of_week: new Date().getDay(),
+          is_outside_shift_hours: (new Date().getHours() < 7 || new Date().getHours() >= 21),
+          is_weekend: (new Date().getDay() === 0 || new Date().getDay() === 6),
+          has_declared_clinical_rel: false,
+          is_break_glass: true,
+          sensitive_category_accessed: false,
+          categories_accessed_count: 5,
+          records_accessed_last_hour: 1,
+          records_accessed_last_day: 1,
+          unique_patients_last_hour: 1,
+          deviation_from_baseline: 0.0
+        }
+      });
+
+      // Notify clinician of denial
+      await systemDb.collection('notifications').insertOne({
+        notification_id: `NOTIF-${crypto.randomUUID()}`,
+        recipient_id: ticket.doctor_id,
+        recipient_role: 'doctor',
+        notification_type: 'supervisor_ticket_denied',
+        payload: {
+          ticket_id,
+          token_id: ticket.token_id,
+          reviewed_by: req.user.user_id,
+          notes: supervisor_notes || null
+        },
+        status: 'delivered',
+        created_at: new Date()
+      });
+
+      return res.status(200).json({
+        ticket_id,
+        status: 'denied',
+        token_id: ticket.token_id,
+        reviewed_by: req.user.user_id,
+        supervisor_notes: supervisor_notes || 'Denied'
+      });
+    }
+
+  } catch (err) {
+    console.error('Supervisor review error:', err);
+    res.status(500).json({ error: 'Internal server error processing supervisor review' });
   }
 });
 
@@ -1323,6 +2032,23 @@ app.get('/consent/validate', async (req, res) => {
       return res.status(401).json({
         valid: false,
         reason: 'token_expired_or_revoked',
+        latency_ms: Number(durationMs)
+      });
+    }
+
+    // Decision D-07: In 15-minute grace period
+    if (token.in_grace_period) {
+      return res.status(200).json({
+        valid: false,
+        in_grace_period: true,
+        reason: 'grace_period',
+        grace_period_remaining_sec: token.grace_period_remaining_sec,
+        health_id: token.health_id,
+        doctor_id: token.doctor_id,
+        institution_id: token.institution_id,
+        scope: token.scope,
+        expires_at: Math.floor(new Date(token.expires_at).getTime() / 1000),
+        token_type: token.token_type,
         latency_ms: Number(durationMs)
       });
     }
@@ -1426,6 +2152,16 @@ app.post('/records/fetch', verifyJWT, requireRole(['doctor', 'doctor_supervisor'
     const token = await getValidatedToken(token_id);
     if (!token) {
       return res.status(422).json({ error: 'Access token is expired or revoked. Please re-request consent from patient.' });
+    }
+
+    // Decision D-07: 15-Minute Grace Period Suspension of Fresh Node Queries
+    if (token.in_grace_period) {
+      return res.status(423).json({
+        error: 'Emergency access token has expired and entered the 15-minute grace period. Fresh queries are suspended; cached records remain viewable in read-only mode.',
+        code: 423,
+        in_grace_period: true,
+        grace_period_remaining_sec: token.grace_period_remaining_sec
+      });
     }
 
     if (token.health_id !== health_id) {

@@ -1,8 +1,8 @@
 # Current State of System
 
-> **Last Updated:** 2026-10-02 (Session 10)  
-> **Current Phase:** Phase 3 (Break-Glass Emergency Access & Blockchain Audit Trail) — Sprint 1 Complete  
-> **Target Milestone:** Phase 3 Sprint 2 (Blockchain Audit Log Node Deployment & On-Chain Anchoring)
+> **Last Updated:** 2026-10-07 (Session 11)  
+> **Current Phase:** Phase 3 (Break-Glass Emergency Access & Blockchain Audit Trail) — Sprint 2 Complete  
+> **Target Milestone:** Phase 3 Sprint 3 (Blockchain Audit Log Node Deployment & On-Chain Anchoring)
 
 ---
 
@@ -72,18 +72,16 @@
   - Tuned MongoDB instances with WiredTiger 256MB cache limits (`--wiredTigerCacheSizeGB 0.25`) and `mem_limit: 220m`.
   - Configured host `C:\Users\adity\.wslconfig` with `memory=3.5GB` and `autoMemoryReclaim=gradual`.
   - Result: Total container RSS slashed by 66% (from 4.93 GB to 1.69 GB), freeing over 4 GB of physical RAM on the Windows host machine while passing 100% of tests (126/126 assertions).
-- [x] **Phase 3 Sprint 1: Break-Glass Emergency Access & Audit Safeguards**:
-  - Implemented Safe Harbor endpoint (`GET /patient/safe-harbor`) allowing emergency clinicians to instantly retrieve critical drug allergies, blood type, and emergency contacts across hospital databases without prior consent.
-  - Implemented Emergency Break-Glass Declaration (`POST /consent/break-glass`) with mandatory clinical justification (>=10 chars), role enforcement, and friction rate-limiting (max 3 declarations / hour per clinician, HTTP 429 on breach).
-  - Implemented 2-hour scoped emergency token issuance (`TOK-BG-*`) with Contract `C-02` validation latency SLA (<50ms, benchmarked at ~2.3ms).
-  - Implemented real-time multi-channel notifications (`system_db.notifications`) alerting patient and caregiver on break-glass trigger.
-  - Implemented strict **Sensitive Category Lockdown Invariant** in `POST /records/fetch` ensuring psychiatric (`PSY`), reproductive (`SEX`), and substance abuse (`ETH`) records remain completely locked down and omitted under emergency tokens.
-  - Implemented Audit Trail logging with Contract `C-04` hash chain genesis link (`0x00...00`) and pre-computed `ml_features` for Phase 4 anomaly detection.
-  - Implemented chronological Audit Trail retrieval endpoint (`GET /audit/patient/:health_id`) with strict patient privacy RBAC.
-  - Authored automated Phase 3 verification suite `scripts/test_phase3_breakglass.js` (67/67 PASS) with zero regressions across prior test suites (**193/193 total passing assertions**).
+- [x] **Phase 3 Sprint 2: Break-Glass Emergency Lifecycle Branches, 15-Minute Grace Period & Supervisor Engine**:
+  - Implemented Branch A (Upfront Long-Window Routing): Requests >2h immediately grant the standard 2h token to eliminate clinical delay, while queuing an upfront extension ticket (`TICK-UPFRONT-*`) in `system_db.supervisor_tickets` with a 15-min SLA.
+  - Implemented Branch B (Pre-Expiry Extension): `POST /consent/break-glass/extend` with a Layer 1 Automated Rule Engine (auto-approves <=2h, 1st extension, 0 doctor misuse flags) emitting Contract `C-04` chained audit events (`linked_event_id`). Non-standard extensions escalate to Layer 2 supervisor review (`TICK-EXT-*`).
+  - Implemented Branch C (15-Minute Grace Period — Decision `D-07`): Expired tokens enter a 15-minute grace period where records remain visible in the browser, but fresh node queries via `POST /records/fetch` return `HTTP 423 Locked`. Emergency reinstatement endpoint `POST /consent/break-glass/reinstate` queues a supervisor ticket (`TICK-REINSTATE-*`); requests past 15 min return `HTTP 410 Gone`.
+  - Implemented Clinical Supervisor Service: `GET /supervisor/queue` with dynamic SLA countdown timers (`sla_remaining_sec`, `sla_breached`) and `POST /supervisor/review` with Contract `C-04` chained audit events (`supervisor_break_glass_approved` / `supervisor_break_glass_denied`).
+  - Enhanced Doctor Portal (`frontend/dashboard.html`): "🚨 Declare Break-Glass Emergency" modal with live Safe Harbor triage inspection, live HUD countdown timer, 15-minute grace banner, and Supervisor Review modal with 1-click Approve/Deny.
+  - Authored automated verification test suite `scripts/test_phase3_sprint2_breakglass.js` (60/60 PASS) with zero regressions across prior suites (**253/253 total passing assertions**).
 
 ### 🔧 In Progress
-- [ ] Phase 3 Sprint 2: Blockchain Audit Log deployment (Hardhat local network, `AuditLog.sol` deployment, on-chain hash anchoring `C-04`/`C-05`).
+- [ ] Phase 3 Sprint 3: Blockchain Audit Log Deployment (Hardhat local network, `AuditLog.sol` compilation & deployment, on-chain hash anchoring `C-04`/`C-05`).
 
 ### ⛔ Blocked / Critical Attention
 - None.
@@ -91,10 +89,11 @@
 ---
 
 ## 🎯 Next Tasks for Coding Agent
-1. **Phase 3 Sprint 2: Blockchain Audit Log Deployment**:
+1. **Phase 3 Sprint 3: Blockchain Audit Log Deployment**:
    - Set up local Ethereum/Hardhat node.
    - Compile and deploy `AuditLog.sol` per `docs/02_smart_contract.md`.
-   - Wire Audit Service in `backend/index.js` to log access events with canonical JSON serialization (`C-05`).
-2. **Phase 3 Sprint 3: Supervisor Dashboard & Extensions**:
-   - Build supervisor dashboard endpoints and review workflows for emergency extension requests (>2h up to 4h grace period).
+   - Wire Audit Service in `backend/index.js` to anchor access events on-chain with canonical JSON serialization (`C-05`).
+2. **Phase 4: ML Anomaly Detection Service**:
+   - Build FastAPI scoring service evaluating `C-03` pre-computed features and weights (`C-06`).
+
 
