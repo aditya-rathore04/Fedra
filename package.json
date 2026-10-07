@@ -1,0 +1,13 @@
+{
+  "name": "fedra",
+  "version": "1.0.0",
+  "description": "Federated Medical Record Discovery and Secure Access System (FEDRA)",
+  "scripts": {
+    "start": "npm --prefix backend start",
+    "seed:patients": "npm --prefix backend run seed:patients",
+    "test:patients": "npm --prefix backend run test:patients",
+    "test:phase1": "npm --prefix backend run test:phase1",
+    "test:phase2": "npm --prefix backend run test:phase2",
+    "test:breakglass": "npm --prefix backend run test:breakglass"
+  }
+}

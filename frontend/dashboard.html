@@ -1420,11 +1420,24 @@
 
           ${warningHtml}
 
-          ${renderCategoryCard('Critical Allergies & Intolerances', '🚨', records.allergies)}
-          ${renderCategoryCard('Active Prescriptions & Medications', '💊', records.medications)}
-          ${renderCategoryCard('Diagnosed Conditions & Problems', '🩺', records.conditions)}
-          ${renderCategoryCard('Diagnostic Studies & Laboratory Panels', '🔬', records.lab_reports)}
-          ${renderCategoryCard('Procedures & Encounters', '🏥', records.encounters_procedures)}
+          ${(data.total_records_returned === 0) ? `
+            <div style="background: rgba(245, 158, 11, 0.08); border: 1px dashed #F59E0B; padding: 24px; margin-top: 16px; text-align: center;">
+              <div style="font-size: 14px; font-weight: 700; color: #F59E0B; margin-bottom: 8px;">⚠️ 0 Clinical Resources Returned from Connected Nodes</div>
+              <div style="font-size: 12px; color: #D4D4D4; line-height: 1.6; max-width: 600px; margin: 0 auto;">
+                The federated FHIR node(s) (${Object.keys(data.node_statuses || {}).map(k => `${k}: ${data.node_statuses[k]}`).join(', ')}) returned no active clinical resources for Health ID <strong>${escapeHtml(data.health_id)}</strong>.
+              </div>
+              <div style="font-size: 11px; color: #A3A3A3; margin-top: 12px; line-height: 1.5;">
+                💡 <strong>Why this happens:</strong> HAPI FHIR containers use in-memory stores that reset when Docker containers restart.<br/>
+                Run <code style="background: #262626; padding: 3px 8px; color: #38BDF8; font-family: monospace;">npm run seed:patients</code> in your <code>backend</code> terminal to populate the nodes, then click <strong>⚡ Fetch Clinical Records</strong> again.
+              </div>
+            </div>
+          ` : `
+            ${renderCategoryCard('Critical Allergies & Intolerances', '🚨', records.allergies)}
+            ${renderCategoryCard('Active Prescriptions & Medications', '💊', records.medications)}
+            ${renderCategoryCard('Diagnosed Conditions & Problems', '🩺', records.conditions)}
+            ${renderCategoryCard('Diagnostic Studies & Laboratory Panels', '🔬', records.lab_reports)}
+            ${renderCategoryCard('Procedures & Encounters', '🏥', records.encounters_procedures)}
+          `}
         </div>
       `;
     }
