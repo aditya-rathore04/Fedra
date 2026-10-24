@@ -374,3 +374,27 @@ Every session must append a new entry to the bottom of this file.
   - `scripts/test_phase1_jwt.js`: **33/33 PASS** (100% Green).
   - Total: **304/304 passing assertions platform-wide**.
 - **Next Steps:** STOP at Checkpoint 2. Present summary to user and pause for approval before starting Part 3 (Tessera Go Service container).
+
+
+---
+
+## Session 14 — 2026-10-25 (Tessera Audit Migration Part 3: Go Service Container & RFC 6962 Personality)
+- **Goal:** Build, containerize, and verify the Go Tessera Transparency Log service on port `3600` (`docker-compose.yml`) implementing RFC 6962 Merkle tree algorithm, binary leaf storage, and C2SP Signed Note checkpoints with Ed25519 notary signatures.
+- **Files Created / Modified:**
+  - `tessera/go.mod`: Go 1.22 module file.
+  - `tessera/main.go`: Pure Go standard library service implementing:
+    - `POST /add`: Leaf hash append, atomic tree size increment, binary persistence to `/data/leaves.bin`.
+    - `GET /checkpoint`: Signed tree head note in C2SP format signed by Ed25519 key.
+    - `GET /proof?index=N`: RFC 6962 Merkle inclusion proof.
+    - `GET /health` & `GET /pubkey`: Diagnostic and public key distribution endpoints.
+  - `tessera/Dockerfile`: Multi-stage Alpine container (`golang:1.23-alpine` builder + `alpine:3.20` runner).
+  - `tessera/README.md`: Service architecture, API reference, and cryptographic guarantees.
+  - `docker-compose.yml`: Added `tessera` container service with port mapping `3600:3500` (port 3600 selected because Windows TCP port exclusion range 3452-3551 blocks 3500), volume `tessera-data:/data`, and `mem_limit: 128m`.
+  - `backend/.env`: Configured `TESSERA_URL=http://localhost:3600`.
+  - `backend/index.js`: Updated default fallback `TESSERA_URL` to `http://localhost:3600`.
+  - `scripts/test_tessera_service.js`: Authored new verification suite (**32/32 PASSED**) testing health, `/add`, `/checkpoint` Ed25519 signature validity, and `/proof` Merkle path reconstruction.
+- **Verification:**
+  - `scripts/test_tessera_service.js`: **32/32 PASS** (100% Green).
+  - `scripts/test_audit_crypto.js`: **51/51 PASS** (100% Green).
+  - Total platform assertions: **336/336 passing platform-wide**.
+- **Next Steps:** STOP at Checkpoint 3. Present summary to user and pause for approval before starting Part 4 (Backend Outbox Worker & Proof Relay API `GET /audit/proof/:event_id`).

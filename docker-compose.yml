@@ -73,3 +73,23 @@ services:
     ports: ["27020:27017"]
     mem_limit: 220m
     networks: [mednet]
+
+  # ─── Tessera Transparency Log Notary ───────────────────────────────
+  tessera:
+    build:
+      context: ./tessera
+      dockerfile: Dockerfile
+    container_name: tessera-log
+    ports: ["3600:3500"]
+    environment:
+      - PORT=3500
+      - ORIGIN=fedra.audit.log
+      - STORAGE_DIR=/data
+    volumes:
+      - tessera-data:/data
+    mem_limit: 128m
+    networks: [mednet]
+
+volumes:
+  tessera-data:
+    driver: local

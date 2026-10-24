@@ -1,8 +1,8 @@
 # Current State of System
 
-> **Last Updated:** 2026-10-24 (Session 13)  
-> **Current Phase:** Phase 3 (Break-Glass Emergency Access & Tessera Transparency Log Audit Layer) — Sprint 3 Part 2 Complete  
-> **Target Milestone:** Phase 3 Sprint 3 Part 3 (Tessera Go Personality Service Container on port 3500)
+> **Last Updated:** 2026-10-25 (Session 14)  
+> **Current Phase:** Phase 3 (Break-Glass Emergency Access & Tessera Transparency Log Audit Layer) — Sprint 3 Part 3 Complete  
+> **Target Milestone:** Phase 3 Sprint 3 Part 4 (Backend Outbox Worker & Proof Relay API `GET /audit/proof/:event_id`)
 
 ---
 
@@ -10,7 +10,7 @@
 
 | Component | Status | Location / Port | Notes |
 |---|---|---|---|
-| **Docker Engine** | 🟢 Running | Localhost | Docker Desktop active, 7 containers up |
+| **Docker Engine** | 🟢 Running | Localhost | Docker Desktop active, 8 containers up (including `tessera-log`) |
 | **HAPI FHIR Node 1 (Apollo)** | 🟢 Up | `localhost:8081/fhir` | Spring Boot active, Serial GC + `-Xmx384m`, Indian cohort loaded, `mem_limit: 480m` |
 | **HAPI FHIR Node 2 (Fortis)** | 🟢 Up | `localhost:8082/fhir` | Spring Boot active, Serial GC + `-Xmx384m`, Indian cohort loaded, `mem_limit: 480m` |
 | **HAPI FHIR Node 3 (Max)** | 🟢 Up | `localhost:8083/fhir` | Spring Boot active, Serial GC + `-Xmx384m`, Indian cohort loaded, `mem_limit: 480m` |
@@ -23,7 +23,7 @@
 | **Audit Trail Service** | 🟢 Spec-Compliant | `GET /audit/patient/:id` | Contract C-04 hash chain + `patient_seq`, C-05 RFC 8785 JCS canonical hash, HMAC IDs, patient privacy RBAC. |
 | **Doctor Portal (Frontend)** | 🟢 Interactive Deep Viewer | `frontend/dashboard.html` | Access request modal, live token timer, clinical drawer with findings, codes & FHIR inspection. |
 | **Patient Browser App (Workaround)** | 🟢 All 6 Patients Synced | `frontend/patient.html` | Smartphone mockup frame, all 6 Indian patients, inbox, approval sheet, sensitive toggles, self-timeline. |
-| **Audit Notary (Tessera)** | 🟢 Core Ready | `backend/index.js` | Part 1 Governance and Part 2 Cryptographic Core & Unified Pipeline Complete (51/51 tests pass). Part 3 container next. |
+| **Audit Notary (Tessera)** | 🟢 Up & Verified | `localhost:3600` (`tessera-log`) | Go container active on port 3600: `/add`, `/checkpoint` (C2SP Signed Note), `/proof` (RFC 6962), `/pubkey`. Part 3 Complete (32/32 tests pass). |
 | **ML Anomaly Detection** | ⚪ Not Started | Spec: `docs/04` | FastAPI scoring service planned for Phase 4 |
 | **Patient Mobile App (Native Flutter)** | ⚪ Deferred (Workaround Active) | `patient_app/` | Browser mobile mockup active in `patient.html`; Flutter app build scheduled after demo. |
 
@@ -94,10 +94,16 @@
   - Enforced fail-closed audit logging on clinical records fetch (`POST /records/fetch` returns `HTTP 503` if audit write fails).
   - Wired missing audit events: `consent_granted`, `consent_revoked`, and `sensitive_category_updated`.
   - Authored automated verification test suite `scripts/test_audit_crypto.js` (**51/51 PASSED**).
-  - Verified zero regressions across existing suites: **304/304 passing assertions platform-wide**.
+- [x] **Phase 3 Sprint 3 — Tessera Migration Part 3 (Tessera Transparency Log Container & Merkle Personality)**:
+  - Authored `tessera/main.go` using pure Go standard library implementing RFC 6962 Merkle tree algorithm, binary leaf persistence (`leaves.bin`), and C2SP Signed Note checkpoints signed with Ed25519.
+  - Built multi-stage static Alpine container `tessera/Dockerfile` (image size ~15 MB, runtime RAM < 12 MB).
+  - Added `tessera` container service to `docker-compose.yml` with port mapping `3600:3500` (bypassing Windows TCP port exclusion range 3452-3551), persistent volume `tessera-data:/data`, and `mem_limit: 128m`.
+  - Configured `backend/.env` with `TESSERA_URL=http://localhost:3600`.
+  - Authored automated verification test suite `scripts/test_tessera_service.js` (**32/32 PASSED**): verified container health, `POST /add` leaf appending, `GET /checkpoint` C2SP note format, Ed25519 signature validity, and `GET /proof` RFC 6962 inclusion proofs reconstruction against root hash.
+  - Verified platform-wide health: **336/336 assertions passing platform-wide**.
 
 ### 🔧 In Progress
-- [ ] Phase 3 Sprint 3: Tessera Transparency Log Deployment (Part 3 Go container, Part 4 outbox poller & C-09 relay, Part 5 in-browser verifier).
+- [ ] Phase 3 Sprint 3: Tessera Transparency Log Deployment (Part 4 outbox poller & C-09 relay, Part 5 in-browser verifier).
 
 ### ⛔ Blocked / Critical Attention
 - None.
@@ -108,8 +114,8 @@
 1. **Phase 3 Sprint 3: Tessera Transparency Log Deployment (Decision D-10)**:
    - Part 1: Governance & Documentation Layer (Completed).
    - Part 2: Backend Cryptographic Core & Unified Audit Pipeline (Completed & Verified).
-   - **Part 3: Tessera Transparency Log Service (Go container in docker-compose on port 3500)** — AWAITING USER CONFIRMATION.
-   - Part 4: Backend Outbox Worker & Proof Relay API (C-09 endpoint).
+   - Part 3: Tessera Transparency Log Service Container (Completed & Verified).
+   - **Part 4: Backend Outbox Worker & Proof Relay API (`GET /audit/proof/:event_id`)** — AWAITING USER CONFIRMATION.
    - Part 5: Patient App Audit UI & In-Browser Verifier (live Merkle proof validation & tamper demo).
 2. **Phase 4: ML Anomaly Detection Service**:
    - Build FastAPI scoring service evaluating `C-03` pre-computed features and weights (`C-06`).

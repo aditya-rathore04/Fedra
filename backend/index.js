@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27020';
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-demo-key-federated-ehr-2026';
 const HMAC_SECRET = process.env.HMAC_SECRET || 'fedra-audit-hmac-secret-key-32b';
-const TESSERA_URL = process.env.TESSERA_URL || 'http://localhost:3500';
+const TESSERA_URL = process.env.TESSERA_URL || 'http://localhost:3600';
 const TESSERA_ORIGIN = process.env.TESSERA_ORIGIN || 'fedra.audit.log';
 
 /**
