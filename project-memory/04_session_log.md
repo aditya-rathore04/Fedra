@@ -343,3 +343,34 @@ Every session must append a new entry to the bottom of this file.
   - `scripts/test_phase3_sprint2_breakglass.js`: Updated Step 1 assertions to verify 8-hour window and added Step 11 verifying end emergency and patient visibility.
 - **Verification:** Node syntax passed cleanly across all modified JavaScript and HTML script blocks.
 - **Next Steps:** Phase 3 Sprint 3 Blockchain Audit Log Deployment (Hardhat & AuditLog.sol).
+
+
+---
+
+## Session 13 — 2026-10-24 (Tessera Audit Migration Part 2: Backend Cryptographic Core)
+- **Goal:** Implement Part 2 of Tessera Transparency Log migration: deterministic RFC 8785 canonicalization, HMAC pseudonymization, per-patient contiguous sequence counters, fail-closed centralized `writeAuditEvent()`, and comprehensive verification.
+- **Files Modified:**
+  - `backend/.env`: Added `HMAC_SECRET`, `TESSERA_URL`, and `TESSERA_ORIGIN`.
+  - `backend/index.js`:
+    - Added `canonicalizeJCS(obj)` implementing RFC 8785 JSON Canonicalization Scheme (lexicographical sorting of UTF-16 code units, minimal formatting, -0 normalization).
+    - Added `computeCanonicalHash(immutableSubset)` using SHA-256.
+    - Added `hmacId(rawId)` using keyed HMAC-SHA256 for actor and patient health IDs (Decision `D-10`).
+    - Added `normalizeLinkedEventId(id)` normalizing linked hashes to 64 hex characters.
+    - Added `getNextPatientSeq(patientHash)` using atomic MongoDB `$inc` on `system_db.audit_counters` (Contract `C-04`).
+    - Added centralized `writeAuditEvent(eventData)` function returning `immutable_subset`, `canonical_hash`, and initial `tessera: { status: 'pending', log_index: null }`.
+    - Added indexes for `audit_events` and `audit_counters` in `initDatabase()`.
+    - Refactored all direct `systemDb.collection('audit_events').insertOne(...)` call sites across the gateway to route through `writeAuditEvent()`.
+    - Enforced fail-closed audit write on `POST /records/fetch` returning `HTTP 503` if the audit write fails.
+    - Wired `consent_granted` on `POST /consent/grant`, `consent_revoked` on `POST /consent/revoke`, and `sensitive_category_updated` on `POST /consent/sensitive`.
+    - Updated `GET /audit/patient/:health_id` to query by `patient_hash` alongside `subject_health_id`.
+    - Exported cryptographic core and database helpers at bottom of file.
+  - `scripts/test_audit_crypto.js`: Authored new comprehensive 51-assertion verification suite covering RFC 8785 invariance, SHA-256, HMAC, contiguous sequence counters, outbox pending status, and HTTP API integration.
+  - `scripts/test_phase3_sprint2_breakglass.js`: Realigned test patient email in Step 11 (`lakshmi-venkatesh@test.com`) and updated revocation status code check to include HTTP 422.
+- **Verification:**
+  - `scripts/test_audit_crypto.js`: **51/51 PASS** (100% Green).
+  - `scripts/test_phase3_sprint2_breakglass.js`: **76/76 PASS** (100% Green).
+  - `scripts/test_phase2_consent.js`: **48/48 PASS** (100% Green).
+  - `scripts/test_indian_patients.js`: **45/45 PASS** (100% Green).
+  - `scripts/test_phase1_jwt.js`: **33/33 PASS** (100% Green).
+  - Total: **304/304 passing assertions platform-wide**.
+- **Next Steps:** STOP at Checkpoint 2. Present summary to user and pause for approval before starting Part 3 (Tessera Go Service container).

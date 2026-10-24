@@ -11,6 +11,168 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27020';
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-demo-key-federated-ehr-2026';
+const HMAC_SECRET = process.env.HMAC_SECRET || 'fedra-audit-hmac-secret-key-32b';
+const TESSERA_URL = process.env.TESSERA_URL || 'http://localhost:3500';
+const TESSERA_ORIGIN = process.env.TESSERA_ORIGIN || 'fedra.audit.log';
+
+/**
+ * RFC 8785: JSON Canonicalization Scheme (JCS)
+ * Deterministically serializes a JavaScript object into a canonical UTF-8 string:
+ * - Object keys sorted lexicographically by UTF-16 code units
+ * - Minimal JSON formatting with no whitespace
+ * - Numbers serialized according to ECMAScript standard (-0 becomes 0)
+ * - Undefined object values omitted, undefined array items become null
+ */
+function canonicalizeJCS(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    if (typeof obj === 'number') {
+      if (!Number.isFinite(obj)) {
+        throw new TypeError('Cannot canonicalize non-finite numbers');
+      }
+      return Object.is(obj, -0) ? '0' : JSON.stringify(obj);
+    }
+    return JSON.stringify(obj);
+  }
+
+  if (Array.isArray(obj)) {
+    const items = obj.map(item => {
+      const canonical = canonicalizeJCS(item);
+      return (canonical === undefined || canonical === null) ? 'null' : canonical;
+    });
+    return '[' + items.join(',') + ']';
+  }
+
+  const keys = Object.keys(obj).sort();
+  const entries = [];
+  for (const key of keys) {
+    const value = obj[key];
+    if (value !== undefined && typeof value !== 'symbol' && typeof value !== 'function') {
+      const serializedValue = canonicalizeJCS(value);
+      if (serializedValue !== undefined) {
+        entries.push(JSON.stringify(key) + ':' + serializedValue);
+      }
+    }
+  }
+  return '{' + entries.join(',') + '}';
+}
+
+/**
+ * Computes deterministic SHA-256 hash of RFC 8785 canonicalized JSON.
+ * Contract C-05: canonicalHash = SHA-256(RFC8785_JCS(immutableSubset))
+ */
+function computeCanonicalHash(immutableSubset) {
+  const canonicalJson = canonicalizeJCS(immutableSubset);
+  return crypto.createHash('sha256').update(canonicalJson, 'utf8').digest('hex');
+}
+
+/**
+ * Keyed HMAC-SHA256 pseudonymization for actors and patient health IDs.
+ * Decision D-10 & Contract C-05
+ */
+function hmacId(rawId) {
+  if (!rawId) return '0'.repeat(64);
+  return crypto.createHmac('sha256', HMAC_SECRET).update(String(rawId), 'utf8').digest('hex');
+}
+
+/**
+ * Normalizes linked event ID to a 64-character lowercase hex string.
+ * Initial break-glass declaration uses '0'.repeat(64).
+ * Strips optional '0x' prefix if present.
+ */
+function normalizeLinkedEventId(id) {
+  if (!id) return '0'.repeat(64);
+  let clean = String(id).trim();
+  if (clean.startsWith('0x') || clean.startsWith('0X')) {
+    clean = clean.slice(2);
+  }
+  if (clean.length === 0) return '0'.repeat(64);
+  if (clean.length < 64) return clean.padStart(64, '0');
+  if (clean.length > 64) return clean.slice(0, 64);
+  return clean.toLowerCase();
+}
+
+/**
+ * Atomically increments and returns the contiguous monotonic sequence counter
+ * for a given patient hash. Contract C-04.
+ */
+async function getNextPatientSeq(patientHash) {
+  if (!systemDb) {
+    throw new Error('Database not initialized');
+  }
+  const result = await systemDb.collection('audit_counters').findOneAndUpdate(
+    { patient_hash: patientHash },
+    { $inc: { seq: 1 } },
+    { upsert: true, returnDocument: 'after' }
+  );
+  return result?.seq ?? result?.value?.seq ?? 1;
+}
+
+/**
+ * Centralized, fail-closed audit write pipeline.
+ * Computes immutable subset, canonical RFC 8785 SHA-256 hash, and queues for Tessera integration.
+ * Contracts C-03, C-04, C-05.
+ */
+async function writeAuditEvent(eventData) {
+  if (!systemDb) {
+    throw new Error('Database not initialized: cannot write audit event');
+  }
+
+  const eventId = eventData.event_id || `EVT-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+  const eventType = eventData.event_type;
+  if (!eventType) {
+    throw new Error('Missing required event_type in writeAuditEvent');
+  }
+
+  const actorId = eventData.actor?.id || eventData.actor_id || (typeof eventData.actor === 'string' ? eventData.actor : 'SYSTEM');
+  const patientId = eventData.subject_health_id || eventData.patient?.health_id || eventData.health_id || 'GLOBAL';
+
+  const actorHash = hmacId(actorId);
+  const patientHash = hmacId(patientId);
+  const patientSeq = await getNextPatientSeq(patientHash);
+
+  const isoTimestamp = (eventData.timestamp instanceof Date ? eventData.timestamp : new Date(eventData.timestamp || Date.now())).toISOString();
+  const linkedEventId = normalizeLinkedEventId(eventData.linked_event_id);
+  const metadata = eventData.metadata || {};
+
+  const immutableSubset = {
+    actor_hash: actorHash,
+    event_id: eventId,
+    event_type: eventType,
+    linked_event_id: linkedEventId,
+    metadata: metadata,
+    patient_hash: patientHash,
+    patient_seq: patientSeq,
+    timestamp: isoTimestamp
+  };
+
+  const canonicalHash = computeCanonicalHash(immutableSubset);
+
+  const auditDoc = {
+    event_id: eventId,
+    event_type: eventType,
+    timestamp: new Date(isoTimestamp),
+    actor: typeof eventData.actor === 'object' ? eventData.actor : { id: actorId },
+    actor_hash: actorHash,
+    subject_health_id: patientId,
+    patient_hash: patientHash,
+    patient_seq: patientSeq,
+    linked_event_id: linkedEventId,
+    metadata: metadata,
+    immutable_subset: immutableSubset,
+    canonical_hash: canonicalHash,
+    tessera: {
+      status: 'pending',
+      log_index: null
+    }
+  };
+
+  if (eventData.ml_features) {
+    auditDoc.ml_features = eventData.ml_features;
+  }
+
+  await systemDb.collection('audit_events').insertOne(auditDoc);
+  return auditDoc;
+}
 
 app.use(express.json());
 app.use(cors());
@@ -325,9 +487,17 @@ async function startServer() {
 
       // Audit Service Indexes
       await systemDb.collection('audit_events').createIndex({ subject_health_id: 1, timestamp: -1 });
+      await systemDb.collection('audit_events').createIndex({ patient_hash: 1, timestamp: -1 });
+      await systemDb.collection('audit_events').createIndex({ patient_hash: 1, patient_seq: 1 });
       await systemDb.collection('audit_events').createIndex({ 'actor.id': 1, timestamp: -1 });
+      await systemDb.collection('audit_events').createIndex({ actor_hash: 1, timestamp: -1 });
       await systemDb.collection('audit_events').createIndex({ event_id: 1 }, { unique: true });
+      await systemDb.collection('audit_events').createIndex({ canonical_hash: 1 });
       await systemDb.collection('audit_events').createIndex({ event_type: 1, timestamp: -1 });
+      await systemDb.collection('audit_events').createIndex({ 'tessera.status': 1 });
+
+      // Audit Sequence Counters (Contract C-04)
+      await systemDb.collection('audit_counters').createIndex({ patient_hash: 1 }, { unique: true });
 
       // Phase 3 Sprint 2: Supervisor Review Engine Indexes
       await systemDb.collection('supervisor_tickets').createIndex({ ticket_id: 1 }, { unique: true });
@@ -1113,6 +1283,26 @@ app.post('/consent/grant', verifyJWT, requireRole(['patient', 'system_admin']), 
       read: false
     });
 
+    // 5. Immutable Audit Event: consent_granted
+    await writeAuditEvent({
+      event_id: `EVT-CG-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+      event_type: 'consent_granted',
+      timestamp: grantedAt,
+      actor: {
+        id: req.user.user_id,
+        role: req.user.role,
+        institution_id: req.user.institution_id || 'PATIENT-PORTAL'
+      },
+      subject_health_id: policy.health_id,
+      linked_event_id: '0'.repeat(64),
+      metadata: {
+        policy_id: policyId,
+        token_id: tokenId,
+        doctor_id: policy.doctor_id,
+        scope: finalScope
+      }
+    });
+
     res.status(200).json({
       policy_id: policyId,
       token_id: tokenId,
@@ -1176,6 +1366,26 @@ app.post('/consent/revoke', verifyJWT, requireRole(['patient', 'doctor', 'doctor
       // Clear from in-memory cache
       invalidateTokensForPolicy(targetId);
 
+      // Record audit event: consent_revoked
+      await writeAuditEvent({
+        event_id: `EVT-CR-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+        event_type: 'consent_revoked',
+        timestamp: revokedAt,
+        actor: {
+          id: req.user.user_id,
+          role: req.user.role,
+          institution_id: req.user.institution_id || 'PATIENT-PORTAL'
+        },
+        subject_health_id: policyResult.health_id,
+        linked_event_id: '0'.repeat(64),
+        metadata: {
+          policy_id: targetId,
+          doctor_id: policyResult.doctor_id,
+          revoked_by: req.user.user_id,
+          revoked_by_role: req.user.role
+        }
+      });
+
       // Notify doctor
       if (policyResult.doctor_id) {
         await systemDb.collection('notifications').insertOne({
@@ -1231,7 +1441,7 @@ app.post('/consent/revoke', verifyJWT, requireRole(['patient', 'doctor', 'doctor
         );
 
         // Record audit event (Contract C-04)
-        await systemDb.collection('audit_events').insertOne({
+        await writeAuditEvent({
           event_id: `EVT-BG-END-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
           event_type: 'break_glass_revoked',
           timestamp: revokedAt,
@@ -1241,7 +1451,7 @@ app.post('/consent/revoke', verifyJWT, requireRole(['patient', 'doctor', 'doctor
             institution_id: req.user.institution_id || tokenResult.institution_id || 'HOSP-EMERGENCY'
           },
           subject_health_id: tokenResult.health_id,
-          linked_event_id: tokenResult.break_glass_context?.event_id || '0x0000000000000000000000000000000000000000000000000000000000000000',
+          linked_event_id: tokenResult.break_glass_context?.event_id || '0'.repeat(64),
           metadata: {
             token_id: targetId,
             revoked_by: req.user.user_id,
@@ -1266,6 +1476,27 @@ app.post('/consent/revoke', verifyJWT, requireRole(['patient', 'doctor', 'doctor
           },
           status: 'delivered',
           created_at: revokedAt
+        });
+      }
+
+      if (tokenResult.token_type !== 'break_glass') {
+        await writeAuditEvent({
+          event_id: `EVT-CR-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+          event_type: 'consent_revoked',
+          timestamp: revokedAt,
+          actor: {
+            id: req.user.user_id,
+            role: req.user.role,
+            institution_id: req.user.institution_id || 'PATIENT-PORTAL'
+          },
+          subject_health_id: tokenResult.health_id,
+          linked_event_id: '0'.repeat(64),
+          metadata: {
+            token_id: targetId,
+            policy_id: tokenResult.policy_id,
+            revoked_by: req.user.user_id,
+            revoked_by_role: req.user.role
+          }
         });
       }
 
@@ -1314,7 +1545,7 @@ app.post(['/consent/break-glass/end', '/consent/break-glass/revoke'], verifyJWT,
       { $set: { status: 'revoked', reviewed_at: revokedAt, supervisor_notes: 'Emergency access ended' } }
     );
 
-    await systemDb.collection('audit_events').insertOne({
+    await writeAuditEvent({
       event_id: `EVT-BG-END-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
       event_type: 'break_glass_revoked',
       timestamp: revokedAt,
@@ -1324,7 +1555,7 @@ app.post(['/consent/break-glass/end', '/consent/break-glass/revoke'], verifyJWT,
         institution_id: req.user.institution_id || tokenResult.institution_id || 'HOSP-EMERGENCY'
       },
       subject_health_id: tokenResult.health_id,
-      linked_event_id: tokenResult.break_glass_context?.event_id || '0x0000000000000000000000000000000000000000000000000000000000000000',
+      linked_event_id: tokenResult.break_glass_context?.event_id || '0'.repeat(64),
       metadata: {
         token_id: tokenId,
         revoked_by: req.user.user_id,
@@ -1396,6 +1627,25 @@ app.post('/consent/sensitive', verifyJWT, requireRole(['patient', 'system_admin'
     // 3. Update in-memory cache
     updateTokensSensitiveScope(policy_id, category, isGranted);
 
+    // 4. Immutable Audit Event: sensitive_category_updated
+    await writeAuditEvent({
+      event_id: `EVT-SENS-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+      event_type: 'sensitive_category_updated',
+      timestamp: new Date(),
+      actor: {
+        id: req.user.user_id,
+        role: req.user.role,
+        institution_id: req.user.institution_id || 'PATIENT-PORTAL'
+      },
+      subject_health_id: policyResult.health_id,
+      linked_event_id: '0'.repeat(64),
+      metadata: {
+        policy_id,
+        category,
+        access_granted: isGranted
+      }
+    });
+
     res.json({
       updated: true,
       category,
@@ -1431,11 +1681,12 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
     });
 
     if (recentBgCount >= 3) {
-      await systemDb.collection('audit_events').insertOne({
+      await writeAuditEvent({
         event_id: `EVT-RL-${crypto.randomUUID()}`,
         event_type: 'rate_limit_exceeded',
         actor: { id: req.user.user_id, role: req.user.role, institution_id: req.user.institution_id },
         subject_health_id: health_id,
+        linked_event_id: '0'.repeat(64),
         timestamp: new Date(),
         metadata: { endpoint: '/consent/break-glass', limit: 3, window_hrs: 1, attempt_count: recentBgCount + 1 }
       });
@@ -1615,7 +1866,7 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
     await systemDb.collection('notifications').insertMany(notifications);
 
     // 5. Immutable Audit Event (Contract C-04 hash chaining genesis)
-    const auditEvent = {
+    await writeAuditEvent({
       event_id: eventId,
       event_type: 'break_glass_triggered',
       timestamp: new Date(),
@@ -1625,7 +1876,7 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
         institution_id: instId
       },
       subject_health_id: health_id,
-      linked_event_id: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      linked_event_id: '0'.repeat(64),
       metadata: {
         justification: justification.trim(),
         token_id: tokenId,
@@ -1636,7 +1887,6 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
         upfront_ticket_id: upfrontTicketId,
         caregiver_alerted: !!emergencyContact
       },
-      blockchain_tx_hash: null,
       ml_features: {
         hour_of_day: new Date().getHours(),
         day_of_week: new Date().getDay(),
@@ -1651,9 +1901,7 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
         unique_patients_last_hour: 1,
         deviation_from_baseline: 0.0
       }
-    };
-
-    await systemDb.collection('audit_events').insertOne(auditEvent);
+    });
 
     // 6. Return standard spec response (docs/05)
     res.status(200).json({
@@ -1761,7 +2009,7 @@ app.post('/consent/break-glass/extend', verifyJWT, requireRole(['doctor', 'docto
       cacheToken(updatedToken);
 
       // Chained Audit Event (Contract C-04)
-      const auditEvent = {
+      await writeAuditEvent({
         event_id: extensionEventId,
         event_type: 'break_glass_extended',
         timestamp: new Date(),
@@ -1780,7 +2028,6 @@ app.post('/consent/break-glass/extend', verifyJWT, requireRole(['doctor', 'docto
           previous_expires_at: currentExpiry.toISOString(),
           new_expires_at: newExpiresAt.toISOString()
         },
-        blockchain_tx_hash: null,
         ml_features: {
           hour_of_day: new Date().getHours(),
           day_of_week: new Date().getDay(),
@@ -1795,8 +2042,7 @@ app.post('/consent/break-glass/extend', verifyJWT, requireRole(['doctor', 'docto
           unique_patients_last_hour: 1,
           deviation_from_baseline: 0.0
         }
-      };
-      await systemDb.collection('audit_events').insertOne(auditEvent);
+      });
 
       return res.status(200).json({
         status: 'auto_approved',
@@ -2100,7 +2346,7 @@ app.post('/supervisor/review', verifyJWT, requireRole(['doctor_supervisor', 'hos
       );
 
       // Chained Audit Event (Contract C-04)
-      await systemDb.collection('audit_events').insertOne({
+      await writeAuditEvent({
         event_id: reviewEventId,
         event_type: 'supervisor_break_glass_approved',
         timestamp: new Date(),
@@ -2119,7 +2365,6 @@ app.post('/supervisor/review', verifyJWT, requireRole(['doctor_supervisor', 'hos
           new_expires_at: newExpiresAt.toISOString(),
           supervisor_notes: supervisor_notes || null
         },
-        blockchain_tx_hash: null,
         ml_features: {
           hour_of_day: new Date().getHours(),
           day_of_week: new Date().getDay(),
@@ -2182,7 +2427,7 @@ app.post('/supervisor/review', verifyJWT, requireRole(['doctor_supervisor', 'hos
       );
 
       const denyEventId = `EVT-DENY-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
-      await systemDb.collection('audit_events').insertOne({
+      await writeAuditEvent({
         event_id: denyEventId,
         event_type: 'supervisor_break_glass_denied',
         timestamp: new Date(),
@@ -2199,7 +2444,6 @@ app.post('/supervisor/review', verifyJWT, requireRole(['doctor_supervisor', 'hos
           ticket_type: ticket.ticket_type,
           supervisor_notes: supervisor_notes || null
         },
-        blockchain_tx_hash: null,
         ml_features: {
           hour_of_day: new Date().getHours(),
           day_of_week: new Date().getDay(),
@@ -2582,19 +2826,19 @@ app.post('/records/fetch', verifyJWT, requireRole(['doctor', 'doctor_supervisor'
     const totalRecords = Object.values(categorizedRecords).reduce((sum, list) => sum + list.length, 0);
     const totalOmitted = Object.values(sensitiveOmittedCounts).reduce((sum, cnt) => sum + cnt, 0);
 
-    // Contract C-03: Log access event into audit trail
+    // 5. Fail-Closed Audit Logging (Contract C-03 & C-05)
+    // If audit write fails, DO NOT return clinical records. Return HTTP 503.
     try {
-      const accessEvent = {
-        event_id: `EVT-ACC-${crypto.randomUUID()}`,
+      await writeAuditEvent({
+        event_id: `EVT-ACC-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
         event_type: 'record_access',
-        timestamp: new Date(),
         actor: {
           id: req.user.user_id,
           role: req.user.role,
-          institution_id: req.user.institution_id || 'HOSP-UNKNOWN'
+          institution_id: req.user.institution_id || token.institution_id || 'HOSP-UNKNOWN'
         },
-        patient: { health_id },
         subject_health_id: health_id,
+        linked_event_id: token.break_glass_context?.event_id || '0'.repeat(64),
         metadata: {
           token_id,
           token_type: token.token_type || 'standard',
@@ -2614,10 +2858,13 @@ app.post('/records/fetch', verifyJWT, requireRole(['doctor', 'doctor_supervisor'
           unique_patients_last_hour: 1,
           deviation_from_baseline: 0.0
         }
-      };
-      await systemDb.collection('audit_events').insertOne(accessEvent);
+      });
     } catch (auditErr) {
-      console.error('Non-blocking audit log error in records fetch:', auditErr);
+      console.error('CRITICAL: Audit log failure on record access — failing closed (503):', auditErr);
+      return res.status(503).json({
+        error: 'Audit logging failure: Record access blocked to uphold security guarantees',
+        code: 503
+      });
     }
 
     res.json({
@@ -2808,11 +3055,13 @@ app.get('/audit/patient/:health_id', verifyJWT, async (req, res) => {
   }
 
   try {
+    const patientHash = hmacId(health_id);
     const events = await systemDb.collection('audit_events')
       .find({
         $or: [
           { subject_health_id: health_id },
-          { 'patient.health_id': health_id }
+          { 'patient.health_id': health_id },
+          { patient_hash: patientHash }
         ]
       })
       .sort({ timestamp: -1 })
@@ -2831,4 +3080,19 @@ app.get('/audit/patient/:health_id', verifyJWT, async (req, res) => {
   }
 });
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = {
+  app,
+  canonicalizeJCS,
+  computeCanonicalHash,
+  hmacId,
+  getNextPatientSeq,
+  writeAuditEvent,
+  normalizeLinkedEventId,
+  startServer,
+  getSystemDb: () => systemDb,
+  setSystemDb: (db) => { systemDb = db; }
+};
