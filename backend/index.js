@@ -931,15 +931,22 @@ app.get('/consent/active', verifyJWT, async (req, res) => {
       status: { $in: ['active', 'grace_period'] },
       expires_at: { $gt: fifteenMinsAgo }
     };
+    let patHealthId = null;
     if (req.user.role === 'patient') {
-      let patHealthId = req.user.health_id;
+      patHealthId = req.user.health_id;
       if (!patHealthId) {
         const pat = await systemDb.collection('users').findOne({ user_id: req.user.user_id });
         patHealthId = pat?.health_id;
       }
+      if (!patHealthId && req.query.health_id) {
+        patHealthId = req.query.health_id;
+      }
       bgFilter.health_id = patHealthId;
     } else {
       bgFilter.doctor_id = req.user.user_id;
+      if (req.query.health_id) {
+        bgFilter.health_id = req.query.health_id;
+      }
     }
 
     const breakGlassTokens = await systemDb.collection('access_tokens')
@@ -955,18 +962,64 @@ app.get('/consent/active', verifyJWT, async (req, res) => {
         health_id: t.health_id,
         patient_name: t.patient_name,
         doctor_id: t.doctor_id,
+        doctor_name: t.doctor_name || t.doctor_id,
+        institution_id: t.institution_id,
+        institution_name: t.institution_name || (
+          t.institution_id === 'HOSP-1' ? 'Apollo Memorial Hospital' :
+          t.institution_id === 'HOSP-2' ? 'Fortis Healthcare Center' :
+          t.institution_id === 'HOSP-3' ? 'Max Super Specialty Hospital' : 'Emergency Department'
+        ),
         token_type: 'break_glass',
+        status: t.status,
+        issued_at: t.issued_at,
         expires_at: t.expires_at,
+        duration_hrs: t.duration_hrs || t.break_glass_context?.requested_duration_hrs || t.break_glass_context?.duration_hrs || 2,
+        justification: t.break_glass_context?.justification || 'Emergency clinical override declared',
         in_grace_period: isGrace,
         grace_period_remaining_sec: graceRemainingSec,
         scope: t.scope
       };
     });
 
+    // Query past / concluded break-glass tokens for patient and doctor audit history
+    const pastBgFilter = {
+      token_type: 'break_glass',
+      ...(req.user.role === 'patient' && patHealthId ? { health_id: patHealthId } : { doctor_id: req.user.user_id }),
+      $or: [
+        { status: 'revoked' },
+        { expires_at: { $lte: fifteenMinsAgo } }
+      ]
+    };
+    const pastBgTokens = await systemDb.collection('access_tokens')
+      .find(pastBgFilter)
+      .sort({ issued_at: -1 })
+      .limit(10)
+      .toArray();
+
+    const formattedPastBg = pastBgTokens.map(t => ({
+      token_id: t.token_id,
+      health_id: t.health_id,
+      doctor_id: t.doctor_id,
+      doctor_name: t.doctor_name || t.doctor_id,
+      institution_name: t.institution_name || (
+        t.institution_id === 'HOSP-1' ? 'Apollo Memorial Hospital' :
+        t.institution_id === 'HOSP-2' ? 'Fortis Healthcare Center' :
+        t.institution_id === 'HOSP-3' ? 'Max Super Specialty Hospital' : 'Emergency Department'
+      ),
+      token_type: 'break_glass',
+      status: t.status === 'revoked' ? 'revoked' : 'expired',
+      issued_at: t.issued_at,
+      expires_at: t.expires_at,
+      revoked_at: t.revoked_at || null,
+      duration_hrs: t.duration_hrs || t.break_glass_context?.requested_duration_hrs || 2,
+      justification: t.break_glass_context?.justification || 'Emergency access'
+    }));
+
     res.json({
       count: enriched.length,
       policies: enriched,
-      break_glass_tokens: formattedBgTokens
+      break_glass_tokens: formattedBgTokens,
+      break_glass_history: formattedPastBg
     });
   } catch (err) {
     console.error('Active consent fetch error:', err);
@@ -1096,61 +1149,215 @@ app.post('/consent/deny', verifyJWT, requireRole(['patient', 'system_admin']), a
   }
 });
 
-// Patient or Doctor revokes consent (POST /consent/revoke)
+// Patient or Doctor revokes consent or emergency access (POST /consent/revoke)
 app.post('/consent/revoke', verifyJWT, requireRole(['patient', 'doctor', 'doctor_supervisor', 'system_admin']), async (req, res) => {
-  const { policy_id } = req.body;
-  if (!policy_id) {
-    return res.status(400).json({ error: 'policy_id is required' });
+  const targetId = req.body.policy_id || req.body.token_id || req.body.id;
+  if (!targetId) {
+    return res.status(400).json({ error: 'policy_id or token_id is required' });
   }
 
   try {
     const revokedAt = new Date();
 
-    // 1. Mark policy revoked
+    // 1. Try finding in consent_policies first
     const policyResult = await systemDb.collection('consent_policies').findOneAndUpdate(
-      { policy_id },
+      { policy_id: targetId },
       { $set: { status: 'revoked', revoked_at: revokedAt } },
       { returnDocument: 'after' }
     );
 
-    if (!policyResult) {
-      return res.status(404).json({ error: `Policy '${policy_id}' not found` });
-    }
+    if (policyResult) {
+      // Invalidate active tokens
+      const tokenResult = await systemDb.collection('access_tokens').updateMany(
+        { policy_id: targetId, status: { $in: ['active', 'grace_period'] } },
+        { $set: { status: 'revoked', revoked_at: revokedAt } }
+      );
 
-    // 2. Invalidate active tokens
-    const tokenResult = await systemDb.collection('access_tokens').updateMany(
-      { policy_id, status: 'active' },
-      { $set: { status: 'revoked', revoked_at: revokedAt } }
-    );
+      // Clear from in-memory cache
+      invalidateTokensForPolicy(targetId);
 
-    // 3. Clear from in-memory cache
-    invalidateTokensForPolicy(policy_id);
+      // Notify doctor
+      if (policyResult.doctor_id) {
+        await systemDb.collection('notifications').insertOne({
+          notification_id: `NOTIF-${crypto.randomUUID()}`,
+          recipient_id: policyResult.doctor_id,
+          recipient_role: 'doctor',
+          notification_type: 'consent_revoked',
+          payload: {
+            policy_id: targetId,
+            health_id: policyResult.health_id,
+            patient_name: policyResult.patient_name
+          },
+          created_at: new Date(),
+          read: false
+        });
+      }
 
-    // 4. Notify doctor
-    if (policyResult.doctor_id) {
-      await systemDb.collection('notifications').insertOne({
-        notification_id: `NOTIF-${crypto.randomUUID()}`,
-        recipient_id: policyResult.doctor_id,
-        recipient_role: 'doctor',
-        notification_type: 'consent_revoked',
-        payload: {
-          policy_id,
-          health_id: policyResult.health_id,
-          patient_name: policyResult.patient_name
-        },
-        created_at: new Date(),
-        read: false
+      return res.json({
+        revoked: true,
+        type: 'policy',
+        policy_id: targetId,
+        active_tokens_invalidated: tokenResult.modifiedCount,
+        doctor_notified: true
       });
     }
 
-    res.json({
-      revoked: true,
-      active_tokens_invalidated: tokenResult.modifiedCount,
-      doctor_notified: true
-    });
+    // 2. Fallback: check if targetId is an access_token (e.g. break_glass token or direct token)
+    const tokenResult = await systemDb.collection('access_tokens').findOneAndUpdate(
+      { token_id: targetId },
+      { $set: { status: 'revoked', revoked_at: revokedAt } },
+      { returnDocument: 'after' }
+    );
+
+    if (tokenResult) {
+      // Clear from in-memory cache
+      invalidateToken(targetId);
+
+      // If linked to a policy_id, also update the policy
+      if (tokenResult.policy_id) {
+        await systemDb.collection('consent_policies').updateOne(
+          { policy_id: tokenResult.policy_id },
+          { $set: { status: 'revoked', revoked_at: revokedAt } }
+        );
+        invalidateTokensForPolicy(tokenResult.policy_id);
+      }
+
+      // If break-glass token:
+      if (tokenResult.token_type === 'break_glass') {
+        // Mark pending supervisor tickets as revoked
+        await systemDb.collection('supervisor_tickets').updateMany(
+          { token_id: targetId, status: 'pending_supervisor' },
+          { $set: { status: 'revoked', reviewed_at: revokedAt, supervisor_notes: 'Emergency access ended' } }
+        );
+
+        // Record audit event (Contract C-04)
+        await systemDb.collection('audit_events').insertOne({
+          event_id: `EVT-BG-END-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+          event_type: 'break_glass_revoked',
+          timestamp: revokedAt,
+          actor: {
+            id: req.user.user_id,
+            role: req.user.role,
+            institution_id: req.user.institution_id || tokenResult.institution_id || 'HOSP-EMERGENCY'
+          },
+          subject_health_id: tokenResult.health_id,
+          linked_event_id: tokenResult.break_glass_context?.event_id || '0x0000000000000000000000000000000000000000000000000000000000000000',
+          metadata: {
+            token_id: targetId,
+            revoked_by: req.user.user_id,
+            revoked_by_role: req.user.role,
+            reason: 'Emergency access ended by ' + req.user.role
+          }
+        });
+
+        // Notify patient
+        await systemDb.collection('notifications').insertOne({
+          notification_id: `NOTIF-${crypto.randomUUID()}`,
+          recipient_id: tokenResult.health_id,
+          recipient_role: 'patient',
+          notification_type: 'break_glass_ended',
+          payload: {
+            token_id: targetId,
+            health_id: tokenResult.health_id,
+            doctor_id: tokenResult.doctor_id,
+            ended_by: req.user.user_id,
+            ended_by_role: req.user.role,
+            ended_at: revokedAt
+          },
+          status: 'delivered',
+          created_at: revokedAt
+        });
+      }
+
+      return res.json({
+        revoked: true,
+        type: 'token',
+        token_id: targetId,
+        token_type: tokenResult.token_type,
+        message: tokenResult.token_type === 'break_glass'
+          ? 'Emergency break-glass access ended successfully'
+          : 'Access token revoked successfully'
+      });
+    }
+
+    return res.status(404).json({ error: `Policy or Token '${targetId}' not found` });
+
   } catch (err) {
     console.error('Consent revocation error:', err);
     res.status(500).json({ error: 'Internal server error revoking consent' });
+  }
+});
+
+// Explicit endpoint for ending / revoking emergency break-glass
+app.post(['/consent/break-glass/end', '/consent/break-glass/revoke'], verifyJWT, requireRole(['doctor', 'doctor_supervisor', 'emergency', 'patient', 'system_admin']), async (req, res) => {
+  const tokenId = req.body.token_id || req.body.policy_id || req.body.id;
+  if (!tokenId) {
+    return res.status(400).json({ error: 'token_id is required' });
+  }
+
+  try {
+    const revokedAt = new Date();
+    const tokenResult = await systemDb.collection('access_tokens').findOneAndUpdate(
+      { token_id: tokenId },
+      { $set: { status: 'revoked', revoked_at: revokedAt } },
+      { returnDocument: 'after' }
+    );
+
+    if (!tokenResult) {
+      return res.status(404).json({ error: `Break-glass token '${tokenId}' not found` });
+    }
+
+    invalidateToken(tokenId);
+
+    await systemDb.collection('supervisor_tickets').updateMany(
+      { token_id: tokenId, status: 'pending_supervisor' },
+      { $set: { status: 'revoked', reviewed_at: revokedAt, supervisor_notes: 'Emergency access ended' } }
+    );
+
+    await systemDb.collection('audit_events').insertOne({
+      event_id: `EVT-BG-END-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+      event_type: 'break_glass_revoked',
+      timestamp: revokedAt,
+      actor: {
+        id: req.user.user_id,
+        role: req.user.role,
+        institution_id: req.user.institution_id || tokenResult.institution_id || 'HOSP-EMERGENCY'
+      },
+      subject_health_id: tokenResult.health_id,
+      linked_event_id: tokenResult.break_glass_context?.event_id || '0x0000000000000000000000000000000000000000000000000000000000000000',
+      metadata: {
+        token_id: tokenId,
+        revoked_by: req.user.user_id,
+        revoked_by_role: req.user.role,
+        reason: 'Emergency access ended by ' + req.user.role
+      }
+    });
+
+    await systemDb.collection('notifications').insertOne({
+      notification_id: `NOTIF-${crypto.randomUUID()}`,
+      recipient_id: tokenResult.health_id,
+      recipient_role: 'patient',
+      notification_type: 'break_glass_ended',
+      payload: {
+        token_id: tokenId,
+        health_id: tokenResult.health_id,
+        ended_by: req.user.user_id,
+        ended_by_role: req.user.role,
+        ended_at: revokedAt
+      },
+      status: 'delivered',
+      created_at: revokedAt
+    });
+
+    res.json({
+      success: true,
+      revoked: true,
+      token_id: tokenId,
+      message: 'Emergency break-glass access ended successfully'
+    });
+  } catch (err) {
+    console.error('End break glass error:', err);
+    res.status(500).json({ error: 'Internal server error ending break glass' });
   }
 });
 
@@ -1238,11 +1445,12 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
       });
     }
 
-    // 2. Discover patient & safe harbor details
-    const [regEntry, patUser, safeHarborResult] = await Promise.all([
+    // 2. Discover patient, doctor & safe harbor details
+    const [regEntry, patUser, safeHarborResult, doctorUser] = await Promise.all([
       registryDb.collection('registry_entries').findOne({ health_id }),
       systemDb.collection('users').findOne({ health_id }),
-      findPatientSafeHarbor(health_id)
+      findPatientSafeHarbor(health_id),
+      systemDb.collection('users').findOne({ user_id: req.user.user_id })
     ]);
 
     const patientName = safeHarborResult?.patient?.demographics?.name 
@@ -1250,12 +1458,23 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
       || patUser?.name 
       || 'Emergency Patient';
 
+    const doctorName = doctorUser?.name || req.user.name || req.user.user_id;
+    const instId = req.user.institution_id || doctorUser?.institution_id || 'HOSP-1';
+    const instName = doctorUser?.institution_name || (
+      instId === 'HOSP-1' ? 'Apollo Memorial Hospital' :
+      instId === 'HOSP-2' ? 'Fortis Healthcare Center' :
+      instId === 'HOSP-3' ? 'Max Super Specialty Hospital' : 'Emergency Department'
+    );
+
     const emergencyContact = safeHarborResult?.patient?.safe_harbor?.emergency_contact || null;
 
-    // 3. Issue 2-Hour Emergency Access Token (<50ms SLA)
-    const defaultWindowHrs = 2;
-    const requestedDuration = Number(requested_duration_hrs) || defaultWindowHrs;
-    const expiresAt = new Date(Date.now() + defaultWindowHrs * 3600 * 1000);
+    // 3. Issue Emergency Access Token for requested duration (2, 4, or 8 Hours) (<50ms SLA)
+    const validDurations = [2, 4, 8];
+    const durationHrs = validDurations.includes(Number(requested_duration_hrs))
+      ? Number(requested_duration_hrs)
+      : (Number(requested_duration_hrs) > 0 ? Number(requested_duration_hrs) : 2);
+    const requestedDuration = durationHrs;
+    const expiresAt = new Date(Date.now() + durationHrs * 3600 * 1000);
     const tokenId = `TOK-BG-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
     const eventId = `EVT-BG-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
 
@@ -1263,11 +1482,14 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
       token_id: tokenId,
       health_id,
       doctor_id: req.user.user_id,
-      institution_id: req.user.institution_id || 'HOSP-EMERGENCY',
+      doctor_name: doctorName,
+      institution_id: instId,
+      institution_name: instName,
       token_type: 'break_glass',
       patient_name: patientName,
       issued_at: new Date(),
       expires_at: expiresAt,
+      duration_hrs: durationHrs,
       status: 'active',
       scope: {
         general_access: true,
@@ -1281,6 +1503,7 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
       break_glass_context: {
         event_id: eventId,
         justification: justification.trim(),
+        duration_hrs: durationHrs,
         requested_duration_hrs: requestedDuration,
         extension_request_status: requestedDuration > 2 ? 'pending_supervisor' : 'none',
         extension_history: [],
@@ -1301,11 +1524,13 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
         notification_type: 'break_glass_triggered',
         payload: {
           doctor_id: req.user.user_id,
-          doctor_name: req.user.name || req.user.user_id,
-          institution_id: req.user.institution_id,
+          doctor_name: doctorName,
+          institution_id: instId,
+          institution_name: instName,
           event_id: eventId,
           justification: justification.trim(),
-          window_hrs: defaultWindowHrs,
+          window_hrs: durationHrs,
+          duration_hrs: durationHrs,
           categories_accessed: ['allergy', 'medication', 'condition', 'encounter', 'procedure', 'lab_result']
         },
         status: 'delivered',
@@ -1326,11 +1551,13 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
           patient_health_id: health_id,
           patient_name: patientName,
           doctor_id: req.user.user_id,
-          doctor_name: req.user.name || req.user.user_id,
-          institution_id: req.user.institution_id,
+          doctor_name: doctorName,
+          institution_id: instId,
+          institution_name: instName,
           event_id: eventId,
           justification: justification.trim(),
-          window_hrs: defaultWindowHrs
+          window_hrs: durationHrs,
+          duration_hrs: durationHrs
         },
         channels: ['sms', 'push'],
         status: 'delivered',
@@ -1338,7 +1565,7 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
       });
     }
 
-    // Branch A: If requested duration exceeds 2 hours upfront, enqueue supervisor ticket immediately
+    // Branch A: If requested duration exceeds 2 hours upfront, enqueue supervisor ticket for audit & oversight
     let upfrontTicketId = null;
     if (requestedDuration > 2) {
       upfrontTicketId = `TICK-UPFRONT-${Date.now().toString().slice(-6)}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
@@ -1349,10 +1576,10 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
         health_id,
         patient_name: patientName,
         doctor_id: req.user.user_id,
-        doctor_name: req.user.name || req.user.user_id,
-        institution_id: req.user.institution_id || 'HOSP-EMERGENCY',
+        doctor_name: doctorName,
+        institution_id: instId,
         ticket_type: 'upfront_extension',
-        requested_hours: requestedDuration - defaultWindowHrs,
+        requested_hours: requestedDuration,
         current_expires_at: expiresAt,
         justification: justification.trim(),
         status: 'pending_supervisor',
@@ -1376,7 +1603,8 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
           health_id,
           patient_name: patientName,
           doctor_id: req.user.user_id,
-          requested_hours: requestedDuration - defaultWindowHrs,
+          doctor_name: doctorName,
+          requested_hours: requestedDuration,
           justification: justification.trim()
         },
         status: 'delivered',
@@ -1394,14 +1622,16 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
       actor: {
         id: req.user.user_id,
         role: req.user.role,
-        institution_id: req.user.institution_id || 'HOSP-EMERGENCY'
+        institution_id: instId
       },
       subject_health_id: health_id,
       linked_event_id: '0x0000000000000000000000000000000000000000000000000000000000000000',
       metadata: {
         justification: justification.trim(),
         token_id: tokenId,
-        default_window_hrs: defaultWindowHrs,
+        duration_hrs: durationHrs,
+        window_hrs: durationHrs,
+        default_window_hrs: durationHrs,
         requested_duration_hrs: requestedDuration,
         upfront_ticket_id: upfrontTicketId,
         caregiver_alerted: !!emergencyContact
@@ -1431,7 +1661,9 @@ app.post('/consent/break-glass', verifyJWT, requireRole(['doctor', 'doctor_super
       event_id: eventId,
       ticket_id: upfrontTicketId,
       token_type: 'break_glass',
-      default_window_hrs: defaultWindowHrs,
+      duration_hrs: durationHrs,
+      window_hrs: durationHrs,
+      default_window_hrs: durationHrs,
       expires_at: expiresAt.toISOString(),
       extension_request_status: requestedDuration > 2 ? 'pending_supervisor' : 'none',
       patient_notified: true,

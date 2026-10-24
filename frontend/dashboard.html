@@ -1002,12 +1002,12 @@
         <label style="border: 1px solid #383838; padding: 10px; font-size: 11px; cursor: pointer; background: #111; display: flex; flex-direction: column; gap: 4px;">
           <input type="radio" name="bgDuration" value="4" style="margin-bottom: 4px;">
           <strong>4 Hours</strong>
-          <span style="font-size: 10px; color: #8C8C8C;">2h Instant + Supervisor</span>
+          <span style="font-size: 10px; color: #8C8C8C;">Extended Emergency (Instant Token)</span>
         </label>
         <label style="border: 1px solid #383838; padding: 10px; font-size: 11px; cursor: pointer; background: #111; display: flex; flex-direction: column; gap: 4px;">
           <input type="radio" name="bgDuration" value="8" style="margin-bottom: 4px;">
           <strong>8 Hours</strong>
-          <span style="font-size: 10px; color: #8C8C8C;">Polytrauma / Surgery</span>
+          <span style="font-size: 10px; color: #8C8C8C;">Polytrauma / Surgery (Instant Token)</span>
         </label>
       </div>
 
@@ -1212,7 +1212,7 @@
               <button class="btn-action-primary" style="background: #2563EB; border-color: #3B82F6;" onclick="requestTokenExtension('${activeToken.token_id}')" title="Request +1 Hour Extension via Automated Rule Engine">
                 ⚡ Extend (+1h)
               </button>
-              <button class="btn-cancel" style="border-color: #EF4444; color: #EF4444; font-size: 11px; padding: 7px 12px; cursor: pointer;" onclick="revokeActiveConsent('${activeToken.policy_id || activeToken.token_id}', '${data.health_id}')" title="Revoke emergency access">
+              <button class="btn-cancel" style="border-color: #EF4444; color: #EF4444; font-size: 11px; padding: 7px 12px; cursor: pointer;" onclick="endEmergencyBreakGlass('${activeToken.token_id}', '${data.health_id}')" title="Revoke emergency access">
                 End Emergency
               </button>
             `;
@@ -1326,6 +1326,35 @@
       resultsArea.innerHTML = html;
     }
 
+    async function endEmergencyBreakGlass(tokenId, healthId) {
+      if (!confirm('End this emergency break-glass session immediately?\n\nThis will revoke emergency access and lock down cross-hospital records.')) return;
+      try {
+        const res = await fetch(`${API_BASE}/consent/break-glass/end`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ token_id: tokenId })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          activeToken = null;
+          activeRequestId = null;
+          stopBreakGlassTimer();
+          const viewer = document.getElementById('clinicalViewerContainer');
+          if (viewer) viewer.innerHTML = '';
+          await checkActiveConsentForPatient(healthId);
+          renderResults(currentDiscoveredData);
+          alert('Emergency break-glass session ended successfully.');
+        } else {
+          alert('Failed to end emergency: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        alert('Error ending emergency access: ' + e.message);
+      }
+    }
+
     async function revokeActiveConsent(policyId, healthId) {
       if (!confirm('Revoke this active consent token? This will reset the status to "No Active Consent" so you can test the patient approval flow again.')) return;
       try {
@@ -1335,11 +1364,12 @@
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ policy_id: policyId })
+          body: JSON.stringify({ policy_id: policyId, token_id: policyId })
         });
         if (res.ok) {
           activeToken = null;
           activeRequestId = null;
+          stopBreakGlassTimer();
           const viewer = document.getElementById('clinicalViewerContainer');
           if (viewer) viewer.innerHTML = '';
           await checkActiveConsentForPatient(healthId);
@@ -1814,7 +1844,8 @@
 
         closeBreakGlassModal();
 
-        alert(`🚨 EMERGENCY BREAK-GLASS AUTHORIZED\n\nToken ID: ${data.token_id}\nEmergency Window: ${data.default_window_hrs} Hours\n\nPatient and caregiver emergency notifications dispatched.`);
+        const windowHours = data.duration_hrs || data.window_hrs || data.default_window_hrs || durationHours;
+        alert(`🚨 EMERGENCY BREAK-GLASS AUTHORIZED\n\nToken ID: ${data.token_id}\nEmergency Window: ${windowHours} Hours\n\nPatient and caregiver emergency notifications dispatched.`);
 
         await checkActiveConsentForPatient(targetBgHealthId);
         if (currentDiscoveredData) {

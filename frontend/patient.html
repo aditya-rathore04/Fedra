@@ -447,6 +447,86 @@
       margin-top: 8px;
     }
 
+    /* Consents Filter Tabs */
+    .subtab-bar {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #262626;
+      padding-bottom: 8px;
+    }
+    .subtab-btn {
+      background: #141414;
+      border: 1px solid #2B2B2B;
+      color: #8C8C8C;
+      font-size: 11px;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .subtab-btn.active {
+      background: #262626;
+      border-color: #525252;
+      color: #FFFFFF;
+      font-weight: 600;
+    }
+    .subtab-btn.emergency.active {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: #EF4444;
+      color: #FCA5A5;
+    }
+    .emergency-card {
+      background: linear-gradient(180deg, rgba(239, 68, 68, 0.14) 0%, rgba(20, 20, 20, 0.95) 100%);
+      border: 1px solid #EF4444;
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 0 14px rgba(239, 68, 68, 0.15);
+    }
+    .emergency-badge {
+      font-size: 9px;
+      background: rgba(239, 68, 68, 0.25);
+      color: #FCA5A5;
+      border: 1px solid #EF4444;
+      padding: 2px 6px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .emergency-badge .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #EF4444;
+      box-shadow: 0 0 6px #EF4444;
+      animation: emergencyPulse 1.5s infinite;
+    }
+    @keyframes emergencyPulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    .btn-revoke-emergency {
+      width: 100%;
+      background: rgba(239, 68, 68, 0.15);
+      color: #F87171;
+      border: 1px solid #EF4444;
+      padding: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: all 0.15s;
+    }
+    .btn-revoke-emergency:hover {
+      background: #EF4444;
+      color: #000000;
+    }
+
     /* Active Policy Card */
     .active-card {
       background: #1C1C1C;
@@ -692,14 +772,22 @@
         </div>
       </div>
 
-      <!-- TAB 2: ACTIVE POLICIES -->
+      <!-- TAB 2: ACTIVE POLICIES & BREAK-GLASS -->
       <div id="tabActive" style="display: none;">
         <div class="section-title">
-          <span>Active Doctor Authorizations</span>
+          <span>Active Consents & Emergencies</span>
           <span id="activeCountBadge" style="color: #34D399;">0 Active</span>
         </div>
+
+        <!-- Filter Subtabs -->
+        <div class="subtab-bar">
+          <button id="filterAllBtn" class="subtab-btn active" onclick="setConsentFilter('all')">All</button>
+          <button id="filterStdBtn" class="subtab-btn" onclick="setConsentFilter('standard')">Authorizations (<span id="stdCountBadge">0</span>)</button>
+          <button id="filterBgBtn" class="subtab-btn emergency" onclick="setConsentFilter('break_glass')">🚨 Break-Glass (<span id="bgCountBadge">0</span>)</button>
+        </div>
+
         <div id="activeList">
-          <div class="empty-state">No active doctor authorizations.</div>
+          <div class="empty-state">No active authorizations.</div>
         </div>
       </div>
 
@@ -722,9 +810,10 @@
         <span>Inbox</span>
         <span id="tabBadge" class="nav-badge" style="display: none;">0</span>
       </button>
-      <button class="nav-tab" onclick="switchTab('active')">
+      <button class="nav-tab" onclick="switchTab('active')" style="position: relative;">
         <span>🛡️</span>
         <span>Consents</span>
+        <span id="bgTabDot" style="display: none; position: absolute; top: 6px; right: 26px; width: 8px; height: 8px; background: #EF4444; border-radius: 50%; box-shadow: 0 0 8px #EF4444;"></span>
       </button>
       <button class="nav-tab" onclick="switchTab('records')">
         <span>📋</span>
@@ -1058,9 +1147,20 @@
     }
 
     // -------------------------------------------------------------
-    // Active Consents Flow
+    // Active Consents & Break-Glass Flow
     // -------------------------------------------------------------
     let activePoliciesCache = [];
+    let activeBreakGlassCache = [];
+    let breakGlassHistoryCache = [];
+    let currentConsentFilter = 'all'; // 'all', 'standard', 'break_glass'
+
+    function setConsentFilter(filter) {
+      currentConsentFilter = filter;
+      document.getElementById('filterAllBtn')?.classList.toggle('active', filter === 'all');
+      document.getElementById('filterStdBtn')?.classList.toggle('active', filter === 'standard');
+      document.getElementById('filterBgBtn')?.classList.toggle('active', filter === 'break_glass');
+      renderActiveConsents();
+    }
 
     async function fetchActiveConsents(silent = false) {
       if (!currentPatient?.token) return;
@@ -1070,55 +1170,225 @@
         });
         const data = await res.json();
         activePoliciesCache = data.policies || [];
+        activeBreakGlassCache = data.break_glass_tokens || [];
+        breakGlassHistoryCache = data.break_glass_history || [];
         renderActiveConsents();
       } catch (err) {
         if (!silent) console.error('Error fetching active consents:', err);
       }
     }
 
+    function formatBreakGlassCard(bg) {
+      const isGrace = bg.in_grace_period;
+      const statusLabel = isGrace ? '⚠️ GRACE PERIOD' : `ACTIVE • ${bg.duration_hrs || 2}H`;
+      const expiryFormatted = bg.expires_at ? new Date(bg.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+      const remainingSec = bg.expires_at ? Math.max(0, Math.floor((new Date(bg.expires_at).getTime() - Date.now()) / 1000)) : 0;
+      const remText = isGrace ? 'Expiring in grace period' : `Expires at ${expiryFormatted} (~${Math.floor(remainingSec / 3600)}h ${Math.floor((remainingSec % 3600) / 60)}m left)`;
+
+      return `
+        <div class="emergency-card">
+          <div class="active-header">
+            <div>
+              <strong style="font-size: 13px; color: #FCA5A5;">${bg.doctor_name || 'Emergency Clinician'}</strong>
+              <div style="font-size: 10px; color: #A3A3A3;">🏥 ${bg.institution_name || 'Hospital Emergency Node'}</div>
+            </div>
+            <span class="emergency-badge">
+              <span class="pulse-dot"></span>
+              ${statusLabel}
+            </span>
+          </div>
+
+          <div style="font-size: 10px; color: #F87171; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); padding: 6px; margin: 6px 0;">
+            <strong>🚨 Emergency Token:</strong> <code style="color: #FCA5A5;">${bg.token_id}</code><br>
+            <strong>Clinical Rationale:</strong> "${bg.justification || 'Emergency medical resuscitation'}"
+          </div>
+
+          <div style="font-size: 10px; color: #A3A3A3; margin: 4px 0;">
+            ⏱️ ${remText}
+          </div>
+
+          <div style="font-size: 9px; color: #9CA3AF; margin-top: 6px; line-height: 1.3;">
+            🔒 <em>Protocol Lockdown: Sensitive psychiatric, reproductive, HIV, and substance abuse records remain locked by default.</em>
+          </div>
+
+          <button class="btn-revoke-emergency" onclick="revokeBreakGlassToken('${bg.token_id}')">
+            🚨 End Emergency Access Immediately
+          </button>
+        </div>
+      `;
+    }
+
+    function formatPastBreakGlassCard(bg) {
+      const isRevoked = bg.status === 'revoked';
+      const badgeStyle = isRevoked ? 'background: rgba(239, 68, 68, 0.2); color: #FCA5A5; border: 1px solid #EF4444;' : 'background: #262626; color: #A3A3A3; border: 1px solid #404040;';
+      const dateStr = bg.issued_at ? new Date(bg.issued_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Recent';
+
+      return `
+        <div class="active-card" style="border-color: #383838; opacity: 0.9;">
+          <div class="active-header">
+            <div>
+              <strong style="font-size: 12px; color: #E5E5E5;">${bg.doctor_name || 'Emergency Clinician'}</strong>
+              <div style="font-size: 10px; color: #8C8C8C;">🏥 ${bg.institution_name || 'Hospital Node'} • ${dateStr}</div>
+            </div>
+            <span style="font-size: 9px; padding: 2px 6px; font-weight: 700; ${badgeStyle}">
+              ${isRevoked ? 'REVOKED' : 'EXPIRED'}
+            </span>
+          </div>
+          <div style="font-size: 10px; color: #8C8C8C; margin-top: 4px;">
+            <strong>Token:</strong> <code>${bg.token_id}</code> • <strong>Rationale:</strong> ${bg.justification}
+          </div>
+          <div style="font-size: 9px; color: #525252; margin-top: 4px;">
+            🛡️ Immutable Audit: Chained to cryptographic audit trail (Contract C-04)
+          </div>
+        </div>
+      `;
+    }
+
     function renderActiveConsents() {
       const container = document.getElementById('activeList');
-      const count = activePoliciesCache.length;
-      document.getElementById('activeCountBadge').textContent = `${count} Active`;
+      const stdCount = activePoliciesCache.length;
+      const bgCount = activeBreakGlassCache.length;
 
-      if (count === 0) {
-        container.innerHTML = `<div class="empty-state">No active doctor authorizations.</div>`;
-        return;
+      document.getElementById('stdCountBadge').textContent = stdCount;
+      document.getElementById('bgCountBadge').textContent = bgCount;
+
+      const bgDot = document.getElementById('bgTabDot');
+      if (bgDot) bgDot.style.display = bgCount > 0 ? 'block' : 'none';
+
+      if (bgCount > 0) {
+        document.getElementById('activeCountBadge').innerHTML = `<span style="color:#EF4444;">🚨 ${bgCount} Emergency</span> • <span style="color:#34D399;">${stdCount} Std</span>`;
+      } else {
+        document.getElementById('activeCountBadge').textContent = `${stdCount} Active`;
+        document.getElementById('activeCountBadge').style.color = '#34D399';
       }
 
-      container.innerHTML = activePoliciesCache.map(p => {
-        const sens = p.scope?.sensitive_categories || {};
-        return `
-          <div class="active-card">
-            <div class="active-header">
-              <div>
-                <strong style="font-size: 13px;">${p.doctor_name || 'Practitioner'}</strong>
-                <div style="font-size: 10px; color: #8C8C8C;">${p.institution_name || 'Hospital'}</div>
+      let html = '';
+
+      if (currentConsentFilter === 'all') {
+        if (bgCount === 0 && stdCount === 0) {
+          container.innerHTML = `<div class="empty-state">No active doctor authorizations or emergency overrides.</div>`;
+          return;
+        }
+
+        // Render Active Break-Glass first
+        if (bgCount > 0) {
+          html += activeBreakGlassCache.map(formatBreakGlassCard).join('');
+        }
+
+        // Render Standard Policies
+        if (stdCount > 0) {
+          html += activePoliciesCache.map(p => {
+            const sens = p.scope?.sensitive_categories || {};
+            return `
+              <div class="active-card">
+                <div class="active-header">
+                  <div>
+                    <strong style="font-size: 13px;">${p.doctor_name || 'Practitioner'}</strong>
+                    <div style="font-size: 10px; color: #8C8C8C;">${p.institution_name || 'Hospital'}</div>
+                  </div>
+                  <span class="status-badge-active">ACTIVE • 8H</span>
+                </div>
+
+                <div style="font-size: 10px; color: #737373; margin-top: 4px;">
+                  Purpose: ${p.purpose}
+                </div>
+
+                <div class="scope-badges">
+                  <span class="scope-pill enabled">General Access: ON</span>
+                  <span class="scope-pill ${sens.psychiatric ? 'enabled' : 'locked'}" onclick="toggleSensitiveCategory('${p.policy_id}', 'psychiatric', ${!sens.psychiatric})" style="cursor: pointer;">
+                    🧠 Psych: ${sens.psychiatric ? 'OPEN' : 'LOCKED'}
+                  </span>
+                  <span class="scope-pill ${sens.reproductive ? 'enabled' : 'locked'}" onclick="toggleSensitiveCategory('${p.policy_id}', 'reproductive', ${!sens.reproductive})" style="cursor: pointer;">
+                    🩺 Repro: ${sens.reproductive ? 'OPEN' : 'LOCKED'}
+                  </span>
+                  <span class="scope-pill ${sens.substance_abuse ? 'enabled' : 'locked'}" onclick="toggleSensitiveCategory('${p.policy_id}', 'substance_abuse', ${!sens.substance_abuse})" style="cursor: pointer;">
+                    🍷 Substance: ${sens.substance_abuse ? 'OPEN' : 'LOCKED'}
+                  </span>
+                </div>
+
+                <button class="btn-revoke" onclick="revokePolicy('${p.policy_id}')">Revoke Access Immediately</button>
               </div>
-              <span class="status-badge-active">ACTIVE • 8H</span>
-            </div>
+            `;
+          }).join('');
+        }
+      } else if (currentConsentFilter === 'standard') {
+        if (stdCount === 0) {
+          container.innerHTML = `<div class="empty-state">No active doctor authorizations.</div>`;
+          return;
+        }
+        html += activePoliciesCache.map(p => {
+          const sens = p.scope?.sensitive_categories || {};
+          return `
+            <div class="active-card">
+              <div class="active-header">
+                <div>
+                  <strong style="font-size: 13px;">${p.doctor_name || 'Practitioner'}</strong>
+                  <div style="font-size: 10px; color: #8C8C8C;">${p.institution_name || 'Hospital'}</div>
+                </div>
+                <span class="status-badge-active">ACTIVE • 8H</span>
+              </div>
 
-            <div style="font-size: 10px; color: #737373; margin-top: 4px;">
-              Purpose: ${p.purpose}
-            </div>
+              <div style="font-size: 10px; color: #737373; margin-top: 4px;">
+                Purpose: ${p.purpose}
+              </div>
 
-            <div class="scope-badges">
-              <span class="scope-pill enabled">General Access: ON</span>
-              <span class="scope-pill ${sens.psychiatric ? 'enabled' : 'locked'}" onclick="toggleSensitiveCategory('${p.policy_id}', 'psychiatric', ${!sens.psychiatric})" style="cursor: pointer;">
-                🧠 Psych: ${sens.psychiatric ? 'OPEN' : 'LOCKED'}
-              </span>
-              <span class="scope-pill ${sens.reproductive ? 'enabled' : 'locked'}" onclick="toggleSensitiveCategory('${p.policy_id}', 'reproductive', ${!sens.reproductive})" style="cursor: pointer;">
-                🩺 Repro: ${sens.reproductive ? 'OPEN' : 'LOCKED'}
-              </span>
-              <span class="scope-pill ${sens.substance_abuse ? 'enabled' : 'locked'}" onclick="toggleSensitiveCategory('${p.policy_id}', 'substance_abuse', ${!sens.substance_abuse})" style="cursor: pointer;">
-                🍷 Substance: ${sens.substance_abuse ? 'OPEN' : 'LOCKED'}
-              </span>
-            </div>
+              <div class="scope-badges">
+                <span class="scope-pill enabled">General Access: ON</span>
+                <span class="scope-pill ${sens.psychiatric ? 'enabled' : 'locked'}" onclick="toggleSensitiveCategory('${p.policy_id}', 'psychiatric', ${!sens.psychiatric})" style="cursor: pointer;">
+                  🧠 Psych: ${sens.psychiatric ? 'OPEN' : 'LOCKED'}
+                </span>
+                <span class="scope-pill ${sens.reproductive ? 'enabled' : 'locked'}" onclick="toggleSensitiveCategory('${p.policy_id}', 'reproductive', ${!sens.reproductive})" style="cursor: pointer;">
+                  🩺 Repro: ${sens.reproductive ? 'OPEN' : 'LOCKED'}
+                </span>
+                <span class="scope-pill ${sens.substance_abuse ? 'enabled' : 'locked'}" onclick="toggleSensitiveCategory('${p.policy_id}', 'substance_abuse', ${!sens.substance_abuse})" style="cursor: pointer;">
+                  🍷 Substance: ${sens.substance_abuse ? 'OPEN' : 'LOCKED'}
+                </span>
+              </div>
 
-            <button class="btn-revoke" onclick="revokePolicy('${p.policy_id}')">Revoke Access Immediately</button>
-          </div>
-        `;
-      }).join('');
+              <button class="btn-revoke" onclick="revokePolicy('${p.policy_id}')">Revoke Access Immediately</button>
+            </div>
+          `;
+        }).join('');
+      } else if (currentConsentFilter === 'break_glass') {
+        if (bgCount === 0 && breakGlassHistoryCache.length === 0) {
+          container.innerHTML = `<div class="empty-state">No emergency break-glass records found.<br>When a clinician declares emergency access to your records, real-time controls and immutable audit trails will appear here.</div>`;
+          return;
+        }
+
+        if (bgCount > 0) {
+          html += activeBreakGlassCache.map(formatBreakGlassCard).join('');
+        }
+
+        if (breakGlassHistoryCache.length > 0) {
+          html += `<div style="font-size: 11px; color: #8C8C8C; margin: 16px 0 8px 0; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Past Emergency Access History</div>`;
+          html += breakGlassHistoryCache.map(formatPastBreakGlassCard).join('');
+        }
+      }
+
+      container.innerHTML = html;
+    }
+
+    async function revokeBreakGlassToken(tokenId) {
+      if (!confirm('Are you sure you want to REVOKE this emergency break-glass access immediately?\n\nThis will instantly terminate the clinician\'s access token and lock down records.')) return;
+      try {
+        const res = await fetch(`${API_BASE}/consent/break-glass/end`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentPatient.token}`
+          },
+          body: JSON.stringify({ token_id: tokenId })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert('Emergency break-glass access has been terminated successfully.');
+          fetchActiveConsents();
+        } else {
+          alert('Failed to revoke emergency access: ' + (data.error || 'Unknown error'));
+        }
+      } catch (err) {
+        alert('Revoke error: ' + err.message);
+      }
     }
 
     async function toggleSensitiveCategory(policyId, category, grant) {

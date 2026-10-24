@@ -79,6 +79,10 @@
   - Implemented Clinical Supervisor Service: `GET /supervisor/queue` with dynamic SLA countdown timers (`sla_remaining_sec`, `sla_breached`) and `POST /supervisor/review` with Contract `C-04` chained audit events (`supervisor_break_glass_approved` / `supervisor_break_glass_denied`).
   - Enhanced Doctor Portal (`frontend/dashboard.html`): "🚨 Declare Break-Glass Emergency" modal with live Safe Harbor triage inspection, live HUD countdown timer, 15-minute grace banner, and Supervisor Review modal with 1-click Approve/Deny.
   - Authored automated verification test suite `scripts/test_phase3_sprint2_breakglass.js` (60/60 PASS) with zero regressions across prior suites (**253/253 total passing assertions**).
+- [x] **Break-Glass Emergency Production Fixes (Duration, End Emergency & Patient App Visibility)**:
+  - **Issue 1 Resolved (Patient App Visibility)**: Added active emergency alert cards, pulsating live indicators, sub-navigation filter tabs (`All`, `Authorizations`, `🚨 Break-Glass`), and historical break-glass audit logs in the Patient App (`frontend/patient.html`).
+  - **Issue 2 Resolved (End Emergency Revocation Bug)**: Fixed `Policy not found` error in `POST /consent/revoke` by adding support for token IDs, invalidating in-memory cache, revoking associated supervisor tickets, and providing dedicated `POST /consent/break-glass/end` endpoint wired to the Doctor Dashboard's "End Emergency" button and Patient App.
+  - **Issue 3 Resolved (Window Duration Selection)**: Fixed emergency window calculation in `POST /consent/break-glass` so choosing 2, 4, or 8 hours grants the exact requested window immediately without truncating to 2 hours. Updated Doctor Dashboard HUD timer, modal labels, and alerts.
 
 ### 🔧 In Progress
 - [ ] Phase 3 Sprint 3: Blockchain Audit Log Deployment (Hardhat local network, `AuditLog.sol` compilation & deployment, on-chain hash anchoring `C-04`/`C-05`).

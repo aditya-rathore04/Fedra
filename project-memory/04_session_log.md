@@ -329,3 +329,17 @@ Every session must append a new entry to the bottom of this file.
   - Implemented Decision `D-07`: `HTTP 423 Locked` on node queries during 15-minute grace period prevents surgical blackouts by allowing existing on-screen records to remain visible in read-only mode while preventing further federated queries without supervisor approval.
 - **Bugs Found & Resolved:** None.
 - **Next Task:** Proceed with Phase 3 Sprint 3 (Hardhat local network, `AuditLog.sol` compilation & deployment, on-chain hash anchoring `C-04`/`C-05`).
+
+
+## Session 12 — 2026-10-23 (Break-Glass Emergency Production Fixes)
+- **Goal:** Fix three core issues in the Break-Glass emergency system:
+  1. Patient App visibility of active and historical emergency access in the Consents section.
+  2. End Emergency failure caused by 'Policy not found' error during token revocation.
+  3. Emergency window duration selection truncation (granting full 2, 4, or 8 hours immediately).
+- **Files Modified:**
+  - `backend/index.js`: Updated `POST /consent/break-glass` duration logic and doctor details; updated `POST /consent/revoke` to accept token IDs; added `POST /consent/break-glass/end`; updated `GET /consent/active` with rich emergency metadata and audit history.
+  - `frontend/dashboard.html`: Fixed "End Emergency" handler to call `endEmergencyBreakGlass`; updated modal labels; updated authorization alert to reflect chosen duration.
+  - `frontend/patient.html`: Added Consents sub-navigation filter tabs (`All`, `Authorizations`, `🚨 Break-Glass`), real-time active emergency alert card, emergency audit history, and patient-side revocation button.
+  - `scripts/test_phase3_sprint2_breakglass.js`: Updated Step 1 assertions to verify 8-hour window and added Step 11 verifying end emergency and patient visibility.
+- **Verification:** Node syntax passed cleanly across all modified JavaScript and HTML script blocks.
+- **Next Steps:** Phase 3 Sprint 3 Blockchain Audit Log Deployment (Hardhat & AuditLog.sol).

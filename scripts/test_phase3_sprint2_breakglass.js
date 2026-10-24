@@ -140,7 +140,7 @@ async function runTests() {
     });
 
     check('Upfront break-glass declaration succeeds (HTTP 200)', upfrontRes.status === 200);
-    check('Standard 2-hour window issued immediately (default_window_hrs: 2)', upfrontRes.data?.default_window_hrs === 2);
+    check('Requested 8-hour window issued immediately (default_window_hrs: 8)', (upfrontRes.data?.default_window_hrs === 8 || upfrontRes.data?.duration_hrs === 8));
     check('extension_request_status is pending_supervisor', upfrontRes.data?.extension_request_status === 'pending_supervisor');
     check('ticket_id generated and returned in response', typeof upfrontRes.data?.ticket_id === 'string' && upfrontRes.data.ticket_id.startsWith('TICK-UPFRONT-'));
 
@@ -151,7 +151,7 @@ async function runTests() {
     const upfrontTicketDoc = await systemDb.collection('supervisor_tickets').findOne({ ticket_id: upfrontTicketId });
     check('Upfront ticket exists in system_db.supervisor_tickets', !!upfrontTicketDoc);
     check('Upfront ticket status is pending_supervisor', upfrontTicketDoc?.status === 'pending_supervisor');
-    check('Requested hours in ticket is 6 (8h requested - 2h granted)', upfrontTicketDoc?.requested_hours === 6);
+    check('Requested hours in ticket is 8', upfrontTicketDoc?.requested_hours === 8);
     check('Ticket SLA timestamp exists', !!upfrontTicketDoc?.sla_expires_at);
 
     // ---------------------------------------------------------
@@ -431,6 +431,80 @@ async function runTests() {
       'metadata.ticket_id': escalatedTicketId
     });
     check('Audit event supervisor_break_glass_denied recorded in DB', !!denyAuditEvent);
+
+    // ---------------------------------------------------------
+    // Step 11: End Emergency Break-Glass & Patient Visibility
+    // ---------------------------------------------------------
+    console.log('\n[Step 11] End Emergency Break-Glass & Patient Visibility...');
+
+    // 11.1 Patient queries active consents and sees active break-glass tokens with rich metadata
+    const patLoginRes = await request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'lakshmi.venkatesh@gmail.com', password: 'password123' })
+    });
+    const patToken = patLoginRes.data?.token;
+    check('Patient login succeeds (HTTP 200)', patLoginRes.status === 200 && !!patToken);
+
+    const patActiveRes = await request('/consent/active', {
+      headers: { Authorization: `Bearer ${patToken}` }
+    });
+    check('Patient GET /consent/active succeeds (HTTP 200)', patActiveRes.status === 200);
+    check('Patient sees break_glass_tokens array', Array.isArray(patActiveRes.data?.break_glass_tokens));
+    const matchingUpfrontInPatient = patActiveRes.data?.break_glass_tokens?.find(t => t.token_id === upfrontTokenId);
+    check('Active 8-hour emergency token visible in patient consent view', !!matchingUpfrontInPatient);
+    check('Break-glass token in patient view includes doctor_name', !!matchingUpfrontInPatient?.doctor_name);
+    check('Break-glass token in patient view includes institution_name', !!matchingUpfrontInPatient?.institution_name);
+    check('Break-glass token in patient view reflects 8-hour duration', matchingUpfrontInPatient?.duration_hrs === 8);
+
+    // 11.2 Clinician ends emergency access via POST /consent/break-glass/end
+    const endEmergencyRes = await request('/consent/break-glass/end', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${erToken}` },
+      body: JSON.stringify({ token_id: upfrontTokenId })
+    });
+    check('Clinician POST /consent/break-glass/end succeeds (HTTP 200)', endEmergencyRes.status === 200);
+    check('End emergency response confirms revocation', endEmergencyRes.data?.revoked === true);
+
+    // Verify token status in DB is 'revoked'
+    const revokedTokenDoc = await systemDb.collection('access_tokens').findOne({ token_id: upfrontTokenId });
+    check('Token status in access_tokens is revoked', revokedTokenDoc?.status === 'revoked');
+
+    // Verify POST /records/fetch immediately fails with revoked token
+    const fetchAfterRevokeRes = await request('/records/fetch', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${erToken}` },
+      body: JSON.stringify({ health_id: patAAbha, token_id: upfrontTokenId })
+    });
+    check('Record fetch with revoked emergency token fails (HTTP 401/403)', [401, 403].includes(fetchAfterRevokeRes.status));
+
+    // 11.3 Patient ends an active break-glass emergency via POST /consent/revoke with token_id
+    const bgTempRes = await request('/consent/break-glass', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${erToken}` },
+      body: JSON.stringify({
+        health_id: patAAbha,
+        justification: 'Acute respiratory distress resuscitation requiring immediate vitals lookup.',
+        requested_duration_hrs: 2
+      })
+    });
+    const tempTokenId = bgTempRes.data?.token_id;
+    check('Temporary break-glass token created (HTTP 200)', bgTempRes.status === 200 && !!tempTokenId);
+
+    const patRevokeRes = await request('/consent/revoke', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${patToken}` },
+      body: JSON.stringify({ token_id: tempTokenId })
+    });
+    check('Patient revoking emergency token via POST /consent/revoke succeeds (HTTP 200)', patRevokeRes.status === 200);
+    check('Revocation response confirms token type is break_glass', patRevokeRes.data?.token_type === 'break_glass');
+
+    // 11.4 Verify patient now sees break-glass history
+    const patHistoryRes = await request('/consent/active', {
+      headers: { Authorization: `Bearer ${patToken}` }
+    });
+    check('Patient sees break_glass_history array', Array.isArray(patHistoryRes.data?.break_glass_history));
+    const foundInHistory = patHistoryRes.data?.break_glass_history?.find(h => h.token_id === upfrontTokenId || h.token_id === tempTokenId);
+    check('Concluded break-glass session appears in patient audit history', !!foundInHistory);
 
   } catch (err) {
     console.error('\nUNEXPECTED TEST EXCEPTION:', err);
