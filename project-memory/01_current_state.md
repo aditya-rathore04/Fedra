@@ -23,7 +23,7 @@
 | **Audit Trail Service** | 🟢 Spec-Compliant | `GET /audit/patient/:id` | Contract C-04 hash chain genesis link, C-03 pre-computed ML features, patient privacy RBAC. |
 | **Doctor Portal (Frontend)** | 🟢 Interactive Deep Viewer | `frontend/dashboard.html` | Access request modal, live token timer, clinical drawer with findings, codes & FHIR inspection. |
 | **Patient Browser App (Workaround)** | 🟢 All 6 Patients Synced | `frontend/patient.html` | Smartphone mockup frame, all 6 Indian patients, inbox, approval sheet, sensitive toggles, self-timeline. |
-| **Blockchain Audit Log** | ⚪ In Progress | Spec: `docs/02` | `AuditLog.sol` ready; Hardhat node and C-05 anchor pipeline scheduled for Sprint 2 |
+| **Audit Notary (Tessera)** | 🟡 In Progress | Spec: `docs/02` | Evolved from Ethereum to Tessera tile-based transparency log (D-10); Part 1 Governance complete |
 | **ML Anomaly Detection** | ⚪ Not Started | Spec: `docs/04` | FastAPI scoring service planned for Phase 4 |
 | **Patient Mobile App (Native Flutter)** | ⚪ Deferred (Workaround Active) | `patient_app/` | Browser mobile mockup active in `patient.html`; Flutter app build scheduled after demo. |
 
@@ -85,7 +85,7 @@
   - **Issue 3 Resolved (Window Duration Selection)**: Fixed emergency window calculation in `POST /consent/break-glass` so choosing 2, 4, or 8 hours grants the exact requested window immediately without truncating to 2 hours. Updated Doctor Dashboard HUD timer, modal labels, and alerts.
 
 ### 🔧 In Progress
-- [ ] Phase 3 Sprint 3: Blockchain Audit Log Deployment (Hardhat local network, `AuditLog.sol` compilation & deployment, on-chain hash anchoring `C-04`/`C-05`).
+- [ ] Phase 3 Sprint 3: Tessera Transparency Log Deployment (Decision D-10, Contracts C-04/C-05/C-09, Go service, outbox poller, in-browser verifier).
 
 ### ⛔ Blocked / Critical Attention
 - None.
@@ -93,10 +93,12 @@
 ---
 
 ## 🎯 Next Tasks for Coding Agent
-1. **Phase 3 Sprint 3: Blockchain Audit Log Deployment**:
-   - Set up local Ethereum/Hardhat node.
-   - Compile and deploy `AuditLog.sol` per `docs/02_smart_contract.md`.
-   - Wire Audit Service in `backend/index.js` to anchor access events on-chain with canonical JSON serialization (`C-05`).
+1. **Phase 3 Sprint 3: Tessera Transparency Log Deployment (Decision D-10)**:
+   - Part 1: Governance & Documentation Layer (Completed).
+   - Part 2: Backend Cryptographic Core & Unified Audit Pipeline (JCS RFC 8785, HMAC IDs, patient_seq, fail-closed writeAuditEvent).
+   - Part 3: Tessera Transparency Log Service (Go container in docker-compose on port 3500).
+   - Part 4: Backend Outbox Worker & Proof Relay API (C-09 endpoint).
+   - Part 5: Patient App Audit UI & In-Browser Verifier (live Merkle proof validation & tamper demo).
 2. **Phase 4: ML Anomaly Detection Service**:
    - Build FastAPI scoring service evaluating `C-03` pre-computed features and weights (`C-06`).
 

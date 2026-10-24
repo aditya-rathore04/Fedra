@@ -12,11 +12,12 @@ Breaking any contract will cause silent failures across service boundaries.
 | `C-01` | JWT Identity Token Payload | Gateway ↔ All Services | `docs/05 §JWT` | **LOCKED** |
 | `C-02` | Token Validation Latency SLA (<50ms) | Gateway / Consent Service | `phases §Risks` | **LOCKED** |
 | `C-03` | MongoDB `audit_events` with Embedded `ml_features` | Audit ↔ ML Service | `docs/01`, `docs/04` | **LOCKED** |
-| `C-04` | Break-Glass Event Hash Chaining (`linked_event_id`) | Audit Service ↔ Smart Contract | `docs/02` | **LOCKED** |
-| `C-05` | Deterministic `metadataHash` Serialization | Backend ↔ Smart Contract | `docs/02` | **LOCKED** |
+| `C-04` | Break-Glass Event Hash Chaining (`linked_event_id` & `patient_seq`) | Audit Service ↔ Transparency Log | `docs/02`, `D-10` | **LOCKED** |
+| `C-05` | Deterministic RFC 8785 (JCS) Canonical Hash Serialization | Backend ↔ Transparency Log | `docs/02`, `D-10` | **LOCKED** |
 | `C-06` | ML Score Combiner Weights (Break-Glass vs Standard) | ML Scoring Pipeline | `docs/04` | **LOCKED** |
 | `C-07` | Graduated Response Policy Thresholds (0.5 / 0.7 / 0.9) | ML Service ↔ Consent Gateway | `docs/04` | **LOCKED** |
 | `C-08` | Parallel FHIR Cross-Node Query Timeout (3000ms) | Backend Aggregator ↔ FHIR Nodes | `phases §Risks` | **LOCKED** |
+| `C-09` | Audit Proof Response Schema (`GET /audit/proof/:event_id`) | Backend ↔ Patient Verifier | `docs/02`, RFC 6962 | **LOCKED** |
 
 ---
 
@@ -70,20 +71,30 @@ Breaking any contract will cause silent failures across service boundaries.
   }
   ```
 
-### `C-04`: Break-Glass Hash Chain (`linked_event_id`)
-- **Rule:** Break-glass emergency requests and extensions must form a cryptographic back-linked chain:
-  - Initial emergency declaration: `linked_event_id = bytes32(0)`
-  - Extension 1: `linked_event_id = keccak256(initial_event_id)`
-  - Extension 2: `linked_event_id = keccak256(extension_1_event_id)`
-- **Verification:** The patient mobile app verifies the complete chain from the smart contract `patientEventChain(patientHash)`.
+### `C-04`: Break-Glass Hash Chain (`linked_event_id` & `patient_seq`)
+- **Rule:** Break-glass emergency requests and extensions form a cryptographic back-linked chain:
+  - Initial emergency declaration: `linked_event_id = "0".repeat(64)`
+  - Extension 1: `linked_event_id = sha256(initial_event_id)`
+  - Extension 2: `linked_event_id = sha256(extension_1_event_id)`
+- **Sequence Continuity (`patient_seq`):** In addition to `linked_event_id`, every event written for a patient is assigned an atomic, contiguous monotonic counter (`patient_seq: 1, 2, 3...`). The client verifier asserts that `patient_seq` values are strictly sequential; any missing number immediately flags a **middle-record deletion** tampering attempt.
+- **Verification:** The patient app verifies the complete chain and sequence contiguity via `GET /audit/patient/:health_id` and inclusion proofs against the Tessera transparency log.
 
-### `C-05`: Strict `metadataHash` Serialization
-- **Rule:** The smart contract stores `metadataHash` as:
-  $$\text{metadataHash} = \text{keccak256}(\text{canonicalJSON}(mongoDocument))$$
+### `C-05`: Deterministic Canonical Hash Serialization (RFC 8785 JCS)
+- **Rule:** The Tessera transparency log leaf hash is computed over a strictly defined immutable subset of the audit document:
+  $\text{canonicalHash} = \text{SHA-256}(\text{RFC8785\_JCS}(\text{immutableSubset}))$
+- **Immutable Field Subset:**
+  - `event_id` (String)
+  - `event_type` (String)
+  - `actor_hash` (HMAC-SHA256 hex string)
+  - `patient_hash` (HMAC-SHA256 hex string)
+  - `patient_seq` (Integer)
+  - `linked_event_id` (Hex string, 64 chars)
+  - `timestamp` (Fixed ISO-8601 UTC string e.g. `2026-10-24T12:00:00.000Z`)
+  - `metadata` (Object containing event-specific clinical attributes)
+  *(Explicitly excluded: volatile operational fields such as `tessera.*`, `ml_features.*`, `notifications`)*
 - **Canonical Serialization Rule:**
-  - JSON keys must be sorted alphabetically before hashing.
-  - No whitespace between delimiters (`{"a":1,"b":2}`).
-  - Both writer (Audit Service) and verifier (Patient App / Audit Verifier) must use identical canonical JSON serialization.
+  - Adheres strictly to **RFC 8785 (JSON Canonicalization Scheme / JCS)**: keys sorted lexicographically by UTF-16 code units, minimal formatting, no whitespace.
+  - Both writer (Backend Audit Service) and verifier (Patient App) must use identical JCS serialization to guarantee byte-for-byte hash convergence.
 
 ### `C-06`: ML Score Combiner Weights
 - **Pipeline:**
@@ -101,3 +112,23 @@ Breaking any contract will cause silent failures across service boundaries.
 ### `C-08`: Parallel FHIR Query Timeout Budget
 - **Rule:** Queries across distributed hospital FHIR nodes (e.g. Apollo, Fortis, Max) must execute in parallel (`Promise.allSettled`).
 - **Timeout:** 3000ms max per node. If a node times out, the gateway marks that node as `degraded` in the response and returns partial records with an alert rather than failing the entire request.
+
+### `C-09`: Audit Proof Response Schema (`GET /audit/proof/:event_id`)
+- **Producer:** Backend Gateway (`GET /audit/proof/:event_id`)
+- **Consumer:** Patient App In-Browser Cryptographic Verifier
+- **Required Response Schema:**
+  ```json
+  {
+    "event_id": "EVT-BG-855421-B5F2F6",
+    "canonical_hash": "a3f5e1b2c4d6...",
+    "log_index": 42,
+    "tree_size": 128,
+    "inclusion_proof": [
+      "8f14e45f...",
+      "2c0a9d81..."
+    ],
+    "checkpoint": "fedra.audit.log\n128\nC6a0...\n\n— fedra.audit.log u3K9...",
+    "origin": "fedra.audit.log"
+  }
+  ```
+- **Rule:** The server never returns a boolean `"verified": true`. The backend strictly provides the cryptographic proof material; verification is performed locally in the client by reconstructing the Merkle root hash and verifying the Ed25519 checkpoint signature.

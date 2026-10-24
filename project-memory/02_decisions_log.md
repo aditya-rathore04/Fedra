@@ -9,39 +9,44 @@ They cannot be modified or bypassed without explicit team consensus.
 
 | ID | Title | Source | Status |
 |---|---|---|---|
-| `D-01` | Asynchronous Blockchain Logging | `docs/00`, `docs/02` | **LOCKED** |
-| `D-02` | Pseudonymous Hashed Identifiers On-Chain | `docs/02` | **LOCKED** |
-| `D-03` | Off-Chain Data in MongoDB, Proofs On-Chain | `docs/01`, `docs/02` | **LOCKED** |
-| `D-04` | Deterministic Ganache Mnemonic for Development | `docs/02`, `docs/03` | **LOCKED** |
+| `D-01` | Asynchronous Blockchain Logging | `docs/00`, `docs/02` | **SUPERSEDED BY D-10** |
+| `D-02` | Pseudonymous Hashed Identifiers On-Chain | `docs/02` | **SUPERSEDED BY D-10** |
+| `D-03` | Off-Chain Data in MongoDB, Proofs On-Chain | `docs/01`, `docs/02` | **SUPERSEDED BY D-10** |
+| `D-04` | Deterministic Ganache Mnemonic for Development | `docs/02`, `docs/03` | **SUPERSEDED BY D-10** |
 | `D-05` | Dual-Model Anomaly Detection (IF + LSTM) | `docs/04` | **LOCKED** |
 | `D-06` | Three-Tier Graduated Response Framework | `docs/04` | **LOCKED** |
 | `D-07` | 15-Minute Break-Glass Grace Period & Extension Chains | `docs/00`, `docs/02` | **LOCKED** |
 | `D-08` | Pre-Computed ML Features in MongoDB `audit_events` | `docs/01`, `docs/04` | **LOCKED** |
 | `D-09` | Zero Direct Hospital-to-Hospital Communication | `docs/00` | **LOCKED** |
+| `D-10` | Audit Notary is a Tile-Based Transparency Log (Tessera) | `docs/02`, RFC 6962 | **LOCKED** |
 
 ---
 
 ## Detailed Decisions
 
 ### `D-01`: Asynchronous Blockchain Logging
+> ⚠️ **SUPERSEDED BY D-10** — *Retained for architectural history. The operational audit layer has evolved from EVM smart contracts to the Tessera transparency log.*
 - **Decision:** The Audit Service logs events to the Ethereum smart contract asynchronously via a background task/queue. It never blocks the clinical HTTP response loop.
 - **Why:** On-chain mining latency (even 1–3s locally, ~12s on testnet) would degrade doctor clinical workflows and breach the <50ms token/search SLA.
 - **Source:** `docs/02_smart_contract.md §Design Decisions`, `docs/project_build_phases.md §Risks`
 - **What would reopen it:** A hard regulatory compliance mandate requiring synchronous receipt proof before clinical data display.
 
 ### `D-02`: Pseudonymous Hashed Identifiers On-Chain
+> ⚠️ **SUPERSEDED BY D-10** — *Retained for architectural history. Identifiers in Tessera are pseudonymized via keyed HMAC-SHA256 rather than raw keccak256 to prevent ABHA dictionary rainbow-table attacks.*
 - **Decision:** All actor IDs (`keccak256(actor.id)`) and patient IDs (`keccak256(health_id)`) are stored strictly as 32-byte hashes on-chain. No raw identifiers or plain-text health information are ever written to the smart contract.
 - **Why:** Public/consortium blockchains are permanent and transparent; raw health or practitioner IDs violate HIPAA and GDPR privacy principles.
 - **Source:** `docs/02_smart_contract.md §Why Actor and Patient IDs Are Hashed`
 - **What would reopen it:** Migration to a zero-knowledge proof circuit (e.g. zk-SNARKs) where proof of validity replaces hash mapping.
 
 ### `D-03`: Off-Chain Data in MongoDB, Proofs On-Chain
+> ⚠️ **SUPERSEDED BY D-10** — *Retained for architectural history. Canonical event hashes (RFC 8785 JCS + SHA-256) are now anchored in the Tessera Merkle transparency log.*
 - **Decision:** MongoDB (`audit_events`) stores the complete human-readable document. The blockchain stores only `metadataHash = keccak256(JSON.stringify(mongoDocument))`, serving strictly as an immutable notary stamp.
 - **Why:** High gas costs, storage limits, and search inability on EVM make full clinical event storage infeasible on-chain.
 - **Source:** `docs/02_smart_contract.md §What Goes On-Chain vs Off-Chain`
 - **What would reopen it:** Decentralized IPFS content-addressed storage integration replacing MongoDB.
 
 ### `D-04`: Deterministic Ganache Mnemonic for Development
+> ⚠️ **SUPERSEDED BY D-10** — *Retired: The system has eliminated Ganache/Hardhat in favor of a containerized Tessera transparency log service running on port 3500.*
 - **Decision:** Ganache must run using a fixed 12-word mnemonic (`myth like bonus scare over problem client lizard pioneer submit female collect`) with fixed port `8545` and Network ID `5777`.
 - **Why:** Ensures contract addresses, deployer wallets, and demo actor balances remain constant across all 4 team members' machines and automated test scripts.
 - **Source:** `docs/02_smart_contract.md`, `docs/03_docker_environment.md`
@@ -76,3 +81,14 @@ They cannot be modified or bypassed without explicit team consensus.
 - **Why:** Peer-to-peer hospital meshes require $O(N^2)$ firewalls, dynamic TLS peering, and complex distributed trust; the federated gateway architecture provides centralized policy enforcement with decentralized record storage.
 - **Source:** `docs/00_system_architecture.md §System Architecture`
 - **What would reopen it:** Architecture pivot to pure peer-to-peer decentralized networks.
+
+### `D-10`: Audit Notary is a Tile-Based Transparency Log (Tessera)
+- **Decision:** The audit notary layer is implemented as a tile-based Merkle transparency log using Tessera (RFC 6962 / C2SP tlog-tiles). The backend computes a deterministic canonical hash (RFC 8785 JCS + SHA-256) over an immutable subset of each audit event and asynchronously appends it to the Tessera log. Clients (such as the Patient App) independently verify audit inclusion using Merkle proofs and Ed25519-signed checkpoints (C2SP Signed Notes).
+- **Supersedes:** `D-01` (asynchronous anchoring is preserved; mechanism transitions from EVM transactions to Tessera `/add`), `D-02` (pseudonymization uses HMAC-SHA256 with key rather than raw keccak256), `D-03` (Merkle tree tiles store the canonical event hash; MongoDB stores human-readable documents), `D-04` (retired: no Ganache/Hardhat/wallet overhead required).
+- **Why:**
+  1. **Zero Gas & Zero Mining Latency**: Eliminates Ethereum transaction gas costs, block mining delays, and private-key wallet management in a healthcare federated EHR prototype.
+  2. **Verifiable Tamper-Evidence**: Cryptographic Merkle tree tiles allow clients to mathematically verify that an event exists in the signed log and that no past entries have been altered.
+  3. **Ultra-Lean Footprint**: Tessera's Go service operates within a 128MB container limit, preserving physical host RAM within the 3.5GB WSL configuration.
+- **Scope of Claim:** Tamper-evidence against post-hoc database alterations. (Not distributed consensus immutability).
+- **Source:** `docs/02_smart_contract.md`, `tessera_audit_migration_plan.md`
+- **What would reopen it:** A hard institutional requirement mandating multi-organization Byzantine fault tolerance or a public consortium proof-of-stake network.

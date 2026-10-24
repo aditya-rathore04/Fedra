@@ -1,6 +1,12 @@
 # Smart Contract
 ## MedicalAuditLog.sol — Ethereum Blockchain Audit Layer
 
+> 🏛️ **ARCHITECTURAL EVOLUTION & SPECIFICATION STATUS**
+> The Solidity contract `MedicalAuditLog.sol` and Ethereum design patterns documented below represent the initial Phase 3 blockchain prototype specification.
+> To eliminate transaction gas costs, mining latency, and wallet management in federated clinical environments, the active operational audit notary has evolved to a **Tessera Tile-Based Transparency Log** (RFC 6962 / C2SP tlog-tiles, Decision `D-10`).
+> This document is preserved in full for architectural reference and cross-system comparison. See Section 7 for the Tessera transparency log architecture specification.
+
+
 > **File:** `02_smart_contract.md`
 > **Status:** Written — ready for deployment
 > **Network:** Ganache (local) → Sepolia testnet (pre-production)
@@ -310,3 +316,16 @@ npx hardhat run scripts/deploy.js --network ganache
 *Contract version 1.0 — ready for Ganache deployment*
 *Audited by: internal review*
 *Production upgrade path: Hyperledger Fabric for permissioned healthcare network*
+
+---
+
+## 7. Operational Audit Architecture: Tessera Transparency Log (Decision D-10)
+
+While the Ethereum smart contract design serves as a reference notary, the operational FEDRA system utilizes a **Tessera Tile-Based Transparency Log** to deliver high-throughput, gas-free, verifiable audit guarantees.
+
+### 7.1 Architecture Overview
+- **Storage Model**: Log entries are arranged in a binary Merkle tree and stored as immutable tiles (RFC 6962 / C2SP tlog-tiles) on POSIX storage.
+- **Canonical Hash**: Every event's immutable subset is serialized using RFC 8785 (JCS) and hashed with SHA-256 (Contract `C-05`).
+- **Pseudonymization**: Identifiers (`actor.id`, `health_id`) are transformed via keyed HMAC-SHA256 (`D-10`).
+- **Cryptographic Checkpoints**: The log periodically commits a signed tree head (C2SP Signed Note) using an Ed25519 notary key pair.
+- **Client-Side Verification**: The Patient App independently verifies RFC 6962 Merkle inclusion proofs and checkpoint signatures locally, displaying live 🟢 **VERIFIED** or 🔴 **TAMPER WARNING** indicators.
