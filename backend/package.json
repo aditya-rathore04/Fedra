@@ -9,7 +9,8 @@
     "test:patients": "node ../scripts/test_indian_patients.js",
     "test:phase1": "node ../scripts/test_phase1_jwt.js",
     "test:phase2": "node ../scripts/test_phase2_consent.js",
-    "test:breakglass": "node ../scripts/test_phase3_breakglass.js"
+    "test:breakglass": "node ../scripts/test_phase3_breakglass.js",
+    "test:breakglass:sprint2": "node ../scripts/test_phase3_sprint2_breakglass.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

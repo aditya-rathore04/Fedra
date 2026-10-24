@@ -8,6 +8,7 @@
     "test:patients": "npm --prefix backend run test:patients",
     "test:phase1": "npm --prefix backend run test:phase1",
     "test:phase2": "npm --prefix backend run test:phase2",
-    "test:breakglass": "npm --prefix backend run test:breakglass"
+    "test:breakglass": "npm --prefix backend run test:breakglass",
+    "test:breakglass:sprint2": "npm --prefix backend run test:breakglass:sprint2"
   }
 }
