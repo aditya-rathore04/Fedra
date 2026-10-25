@@ -343,3 +343,142 @@ Every session must append a new entry to the bottom of this file.
   - `scripts/test_phase3_sprint2_breakglass.js`: Updated Step 1 assertions to verify 8-hour window and added Step 11 verifying end emergency and patient visibility.
 - **Verification:** Node syntax passed cleanly across all modified JavaScript and HTML script blocks.
 - **Next Steps:** Phase 3 Sprint 3 Blockchain Audit Log Deployment (Hardhat & AuditLog.sol).
+
+
+---
+
+## Session 13 — 2026-10-24 (Tessera Audit Migration Part 2: Backend Cryptographic Core)
+- **Goal:** Implement Part 2 of Tessera Transparency Log migration: deterministic RFC 8785 canonicalization, HMAC pseudonymization, per-patient contiguous sequence counters, fail-closed centralized `writeAuditEvent()`, and comprehensive verification.
+- **Files Modified:**
+  - `backend/.env`: Added `HMAC_SECRET`, `TESSERA_URL`, and `TESSERA_ORIGIN`.
+  - `backend/index.js`:
+    - Added `canonicalizeJCS(obj)` implementing RFC 8785 JSON Canonicalization Scheme (lexicographical sorting of UTF-16 code units, minimal formatting, -0 normalization).
+    - Added `computeCanonicalHash(immutableSubset)` using SHA-256.
+    - Added `hmacId(rawId)` using keyed HMAC-SHA256 for actor and patient health IDs (Decision `D-10`).
+    - Added `normalizeLinkedEventId(id)` normalizing linked hashes to 64 hex characters.
+    - Added `getNextPatientSeq(patientHash)` using atomic MongoDB `$inc` on `system_db.audit_counters` (Contract `C-04`).
+    - Added centralized `writeAuditEvent(eventData)` function returning `immutable_subset`, `canonical_hash`, and initial `tessera: { status: 'pending', log_index: null }`.
+    - Added indexes for `audit_events` and `audit_counters` in `initDatabase()`.
+    - Refactored all direct `systemDb.collection('audit_events').insertOne(...)` call sites across the gateway to route through `writeAuditEvent()`.
+    - Enforced fail-closed audit write on `POST /records/fetch` returning `HTTP 503` if the audit write fails.
+    - Wired `consent_granted` on `POST /consent/grant`, `consent_revoked` on `POST /consent/revoke`, and `sensitive_category_updated` on `POST /consent/sensitive`.
+    - Updated `GET /audit/patient/:health_id` to query by `patient_hash` alongside `subject_health_id`.
+    - Exported cryptographic core and database helpers at bottom of file.
+  - `scripts/test_audit_crypto.js`: Authored new comprehensive 51-assertion verification suite covering RFC 8785 invariance, SHA-256, HMAC, contiguous sequence counters, outbox pending status, and HTTP API integration.
+  - `scripts/test_phase3_sprint2_breakglass.js`: Realigned test patient email in Step 11 (`lakshmi-venkatesh@test.com`) and updated revocation status code check to include HTTP 422.
+- **Verification:**
+  - `scripts/test_audit_crypto.js`: **51/51 PASS** (100% Green).
+  - `scripts/test_phase3_sprint2_breakglass.js`: **76/76 PASS** (100% Green).
+  - `scripts/test_phase2_consent.js`: **48/48 PASS** (100% Green).
+  - `scripts/test_indian_patients.js`: **45/45 PASS** (100% Green).
+  - `scripts/test_phase1_jwt.js`: **33/33 PASS** (100% Green).
+  - Total: **304/304 passing assertions platform-wide**.
+- **Next Steps:** STOP at Checkpoint 2. Present summary to user and pause for approval before starting Part 3 (Tessera Go Service container).
+
+
+---
+
+## Session 14 — 2026-10-25 (Tessera Audit Migration Part 3: Go Service Container & RFC 6962 Personality)
+- **Goal:** Build, containerize, and verify the Go Tessera Transparency Log service on port `3600` (`docker-compose.yml`) implementing RFC 6962 Merkle tree algorithm, binary leaf storage, and C2SP Signed Note checkpoints with Ed25519 notary signatures.
+- **Files Created / Modified:**
+  - `tessera/go.mod`: Go 1.22 module file.
+  - `tessera/main.go`: Pure Go standard library service implementing:
+    - `POST /add`: Leaf hash append, atomic tree size increment, binary persistence to `/data/leaves.bin`.
+    - `GET /checkpoint`: Signed tree head note in C2SP format signed by Ed25519 key.
+    - `GET /proof?index=N`: RFC 6962 Merkle inclusion proof.
+    - `GET /health` & `GET /pubkey`: Diagnostic and public key distribution endpoints.
+  - `tessera/Dockerfile`: Multi-stage Alpine container (`golang:1.23-alpine` builder + `alpine:3.20` runner).
+  - `tessera/README.md`: Service architecture, API reference, and cryptographic guarantees.
+  - `docker-compose.yml`: Added `tessera` container service with port mapping `3600:3500` (port 3600 selected because Windows TCP port exclusion range 3452-3551 blocks 3500), volume `tessera-data:/data`, and `mem_limit: 128m`.
+  - `backend/.env`: Configured `TESSERA_URL=http://localhost:3600`.
+  - `backend/index.js`: Updated default fallback `TESSERA_URL` to `http://localhost:3600`.
+  - `scripts/test_tessera_service.js`: Authored new verification suite (**32/32 PASSED**) testing health, `/add`, `/checkpoint` Ed25519 signature validity, and `/proof` Merkle path reconstruction.
+- **Verification:**
+  - `scripts/test_tessera_service.js`: **32/32 PASS** (100% Green).
+  - `scripts/test_audit_crypto.js`: **51/51 PASS** (100% Green).
+  - Total platform assertions: **336/336 passing platform-wide**.
+- **Next Steps:** STOP at Checkpoint 3. Present summary to user and pause for approval before starting Part 4 (Backend Outbox Worker & Proof Relay API `GET /audit/proof/:event_id`).
+
+
+---
+
+## 📅 Session 15 — Phase 3 Sprint 3: Tessera Migration Part 4 (Backend Outbox Worker & Proof Relay API)
+- **Goal:** Connect the backend gateway to the Tessera transparency log via an asynchronous outbox worker and implement the client-facing proof relay endpoint `GET /audit/proof/:event_id` adhering strictly to Contract `C-09`.
+- **Key Changes:**
+  - **Outbox Worker (`backend/index.js`)**:
+    - Implemented `pollTesseraOutbox()` with reentrancy mutex `isPollingTessera`.
+    - Scans `system_db.audit_events` for events with `'tessera.status': 'pending'` or unintegrated documents.
+    - POSTs `canonical_hash` to `http://localhost:3600/add`.
+    - Atomically updates MongoDB document with `tessera.status = 'integrated'`, integer `log_index`, `tree_size`, and `integrated_at`.
+    - Scheduled recurring 3-second poller in `startServer()` via `startTesseraOutbox()`, with `stopTesseraOutbox()` lifecycle helper.
+  - **Proof Relay API (`GET /audit/proof/:event_id` — Contract `C-09`)**:
+    - Protected by `verifyJWT` with patient RBAC isolation (patients can only fetch proofs for their own records; clinicians/supervisors/admins can audit).
+    - If event is pending integration, returns `HTTP 200` with `status: 'pending'`, `message`, and `canonical_hash`.
+    - If event is integrated, retrieves Merkle inclusion proof and C2SP signed checkpoint from `${TESSERA_URL}/proof?index=${log_index}` and returns Contract `C-09` schema.
+    - Preserved invariant: server strictly NEVER returns `"verified": true`.
+  - **Automated Integration Test Suite (`scripts/test_audit_outbox.js`)**:
+    - Authored comprehensive 39-assertion suite covering pending proof queries, outbox worker DB updates, Contract `C-09` schema validation, in-browser verifier simulation (Ed25519 signature + top-down RFC 6962 Merkle proof reconstruction against checkpoint root), cross-patient RBAC isolation (HTTP 403), non-existent event 404, unauthenticated 401, and end-to-end real clinical break-glass integration.
+- **Verification:**
+  - `node scripts/test_audit_outbox.js` -> **39/39 PASS**
+  - `node scripts/test_audit_crypto.js` -> **51/51 PASS**
+  - `node scripts/test_tessera_service.js` -> **209/209 PASS**
+  - `node scripts/test_phase3_sprint2_breakglass.js` -> **76/76 PASS**
+  - `node scripts/test_phase2_consent.js` -> **48/48 PASS**
+  - `node scripts/test_phase1_jwt.js` -> **33/33 PASS**
+  - **Total:** **456 / 456 assertions passing platform-wide (100% Green)**.
+- **Next Steps:** STOP at Checkpoint 4. Present summary of Part 4 changes to the user and pause for approval before starting Part 5 (Patient App Audit UI & In-Browser Verifier).
+
+
+---
+
+## 📅 Session 16 — Phase 3 Sprint 3: Tessera Migration Part 5 (Patient App UI, In-Browser Verifier & Live Tamper Demo)
+- **Goal:** Implement the interactive Audit Trail in the Patient App (`frontend/patient.html`) with a pure in-browser cryptographic verifier (RFC 8785 JCS, WebCrypto SHA-256, top-down RFC 6962 Merkle reconstruction, C2SP checkpoint Ed25519 signature validation, sequence contiguity and tail truncation checks) and live tamper demonstration capabilities.
+- **Key Changes:**
+  - **Port Configuration & Environment**:
+    - Discovered Windows NAT / Hyper-V dynamic port exclusion on `2976-3075` preventing re-binding port 3000 (`EACCES`).
+    - Configured gateway to port 3100 in `backend/.env`. Updated `frontend/patient.html`, `frontend/dashboard.html`, and all test suites to dynamically resolve `http://localhost:3100`.
+  - **Patient App UI (`frontend/patient.html`)**:
+    - Added 4th navigation tab: **📜 Notary & Audit Trail** with live `#summaryStatusPill`, sequence contiguity monitor, and tail truncation tracker.
+    - Added `#auditContainer` rendering chronological audit cards with sequence numbers, actor/institution info, canonical SHA-256 hashes, and dynamic badges (🟢 `VERIFIED`, 🟡 `INTEGRATING`, 🔴 `TAMPER DETECTED`).
+    - Added collapsible "🔍 Inspect Proof" drawer detailing canonical JCS string, raw Merkle inclusion path, and signed C2SP checkpoint note.
+    - Added **⚡ Simulate Tamper** and **♻️ Restore Event** buttons on each event card and globally in the summary header.
+  - **In-Browser Cryptographic Verifier**:
+    - Pure JavaScript `canonicalizeJCS(obj)` adhering to RFC 8785.
+    - Native WebCrypto SHA-256 calculation for leaf and node hashes.
+    - Top-down RFC 6962 Merkle proof reconstruction against dynamic log sizes.
+    - C2SP checkpoint parser and Ed25519 signature verification against the log's public key.
+    - Contiguous sequence auditor ($1, 2, \dots, N$) and `localStorage` tail truncation monitor.
+  - **Automated Verification Suite (`scripts/test_patient_verifier_tamper.js`)**:
+    - Authored 58-assertion suite verifying UI markup, client JCS canonicalization, live cryptographic verification of real patient events against Tessera, sequence gap detection, tail truncation detection, live tamper detection, and instant restoration.
+- **Verification:**
+  - `node scripts/test_patient_verifier_tamper.js` -> **58/58 PASS**
+  - `node scripts/test_audit_outbox.js` -> **39/39 PASS**
+  - `node scripts/test_audit_crypto.js` -> **51/51 PASS**
+  - `node scripts/test_tessera_service.js` -> **209/209 PASS**
+  - `node scripts/test_phase3_sprint2_breakglass.js` -> **76/76 PASS**
+  - `node scripts/test_phase2_consent.js` -> **48/48 PASS**
+  - `node scripts/test_phase1_jwt.js` -> **33/33 PASS**
+  - **Platform-wide Total:** **514 / 514 assertions passing platform-wide (100% Green, 0 Regressions)**.
+- **Next Steps:** STOP at Checkpoint 5. Present summary of Part 5 to the user and pause for approval before executing Part 6 (Full Integration Suite & Final Project Handoff).
+
+
+---
+
+## 📅 Session 17 — Phase 3 Sprint 3: Tessera Migration Part 6 (Full Integration Suite & Final Project Handoff)
+- **Goal:** Execute the complete multi-phase automated integration test suite across the entire FEDRA platform, verify zero regressions, document the full architecture, and create the final handoff walkthrough.
+- **Port Restoration**:
+   - Re-verified that Windows dynamic port exclusion on `2976-3075` had expired.
+   - Re-bound Express gateway to port `3000` (`PORT=3000` in `backend/.env`).
+   - Verified `http://localhost:3000/health` responds healthy.
+   - Restored UI and test suite endpoints to `http://localhost:3000`.
+- **Platform Verification Results (All 7 Suites)**:
+  1. `scripts/test_patient_verifier_tamper.js` -> **58 / 58 PASS**
+  2. `scripts/test_audit_outbox.js` -> **39 / 39 PASS**
+  3. `scripts/test_tessera_service.js` -> **383 / 383 PASS**
+  4. `scripts/test_audit_crypto.js` -> **51 / 51 PASS**
+  5. `scripts/test_phase3_sprint2_breakglass.js` -> **76 / 76 PASS**
+  6. `scripts/test_phase2_consent.js` -> **48 / 48 PASS**
+  7. `scripts/test_phase1_jwt.js` -> **33 / 33 PASS**
+  - **Grand Total:** **688 / 688 assertions passing platform-wide (100% Green, 0 Failures, 0 Regressions)**.
+- **Milestone Reached:** Phase 3 Sprint 3 (Tessera Transparency Log Audit Layer Migration) is **100% COMPLETE**.
+- **Next Target:** Phase 4 (ML Anomaly Detection Service — Isolation Forest & LSTM Combiner).

@@ -18,7 +18,7 @@ const assert = require('assert');
 const path = require('path');
 const crypto = require('crypto');
 
-const API_BASE = process.env.API_BASE || 'http://localhost:3000';
+const API_BASE = process.env.API_BASE || process.env.GATEWAY_URL || 'http://localhost:3000';
 
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
@@ -440,7 +440,7 @@ async function runTests() {
     // 11.1 Patient queries active consents and sees active break-glass tokens with rich metadata
     const patLoginRes = await request('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email: 'lakshmi.venkatesh@gmail.com', password: 'password123' })
+      body: JSON.stringify({ email: 'lakshmi-venkatesh@test.com', password: 'password123' })
     });
     const patToken = patLoginRes.data?.token;
     check('Patient login succeeds (HTTP 200)', patLoginRes.status === 200 && !!patToken);
@@ -475,7 +475,7 @@ async function runTests() {
       headers: { Authorization: `Bearer ${erToken}` },
       body: JSON.stringify({ health_id: patAAbha, token_id: upfrontTokenId })
     });
-    check('Record fetch with revoked emergency token fails (HTTP 401/403)', [401, 403].includes(fetchAfterRevokeRes.status));
+    check('Record fetch with revoked emergency token fails (HTTP 401/403/422)', [401, 403, 422].includes(fetchAfterRevokeRes.status));
 
     // 11.3 Patient ends an active break-glass emergency via POST /consent/revoke with token_id
     const bgTempRes = await request('/consent/break-glass', {

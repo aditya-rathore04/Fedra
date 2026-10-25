@@ -1,8 +1,8 @@
 # Current State of System
 
-> **Last Updated:** 2026-10-07 (Session 11)  
-> **Current Phase:** Phase 3 (Break-Glass Emergency Access & Blockchain Audit Trail) — Sprint 2 Complete  
-> **Target Milestone:** Phase 3 Sprint 3 (Blockchain Audit Log Node Deployment & On-Chain Anchoring)
+> **Last Updated:** 2026-10-25 (Session 17)  
+> **Current Phase:** Phase 3 (Break-Glass Emergency Access & Tessera Transparency Log Audit Layer) — 100% COMPLETE  
+> **Target Milestone:** Phase 4 (ML Anomaly Detection Service — Isolation Forest & LSTM Combiner)
 
 ---
 
@@ -10,20 +10,20 @@
 
 | Component | Status | Location / Port | Notes |
 |---|---|---|---|
-| **Docker Engine** | 🟢 Running | Localhost | Docker Desktop active, 7 containers up |
+| **Docker Engine** | 🟢 Running | Localhost | Docker Desktop active, 8 containers up (including `tessera-log`) |
 | **HAPI FHIR Node 1 (Apollo)** | 🟢 Up | `localhost:8081/fhir` | Spring Boot active, Serial GC + `-Xmx384m`, Indian cohort loaded, `mem_limit: 480m` |
 | **HAPI FHIR Node 2 (Fortis)** | 🟢 Up | `localhost:8082/fhir` | Spring Boot active, Serial GC + `-Xmx384m`, Indian cohort loaded, `mem_limit: 480m` |
 | **HAPI FHIR Node 3 (Max)** | 🟢 Up | `localhost:8083/fhir` | Spring Boot active, Serial GC + `-Xmx384m`, Indian cohort loaded, `mem_limit: 480m` |
 | **MongoDB Hospital 1-3** | 🟢 Up | Ports `27017`, `27018`, `27019` | WiredTiger cache capped at 256MB, `mem_limit: 220m` |
 | **MongoDB System Central** | 🟢 Up | `localhost:27020` | WiredTiger cache capped at 256MB, `mem_limit: 220m` |
-| **Backend Gateway** | 🟢 Spec-Compliant | `localhost:3000` | Express gateway in `backend/index.js` with RBAC and JWT validation. |
+| **Backend Gateway** | 🟢 Spec-Compliant | `localhost:3000` | Express gateway in `backend/index.js` running on standard port 3000 with RBAC, JWT validation, and fail-closed audit pipeline. |
 | **Identity Service (Auth / JWT)** | 🟢 Spec-Compliant | `backend/index.js` | Contract `C-01` verified, role lifetimes, `/auth/refresh`, registration endpoints active. |
-| **Consent & Break-Glass Service** | 🟢 Spec-Compliant | `backend/index.js` | Full break-glass declaration, 2h tokens, 3/hr rate limit, caregiver notifications, Safe Harbor. |
-| **Federated Record Aggregator** | 🟢 Spec-Compliant | `POST /records/fetch` | Parallel FHIR queries (C-08), strict sensitive category lockdown invariant under break-glass. |
-| **Audit Trail Service** | 🟢 Spec-Compliant | `GET /audit/patient/:id` | Contract C-04 hash chain genesis link, C-03 pre-computed ML features, patient privacy RBAC. |
+| **Consent & Break-Glass Service** | 🟢 Spec-Compliant | `backend/index.js` | Full break-glass declaration, 2h/4h/8h windows, rate limiting, caregiver notifications, Safe Harbor. |
+| **Federated Record Aggregator** | 🟢 Spec-Compliant | `POST /records/fetch` | Parallel FHIR queries (C-08), strict sensitive category lockdown, fail-closed audit write (C-03/C-05). |
+| **Audit Trail Service** | 🟢 Spec-Compliant | `GET /audit/patient/:id` | Contract C-04 hash chain + `patient_seq`, C-05 RFC 8785 JCS canonical hash, HMAC IDs, patient privacy RBAC. |
 | **Doctor Portal (Frontend)** | 🟢 Interactive Deep Viewer | `frontend/dashboard.html` | Access request modal, live token timer, clinical drawer with findings, codes & FHIR inspection. |
-| **Patient Browser App (Workaround)** | 🟢 All 6 Patients Synced | `frontend/patient.html` | Smartphone mockup frame, all 6 Indian patients, inbox, approval sheet, sensitive toggles, self-timeline. |
-| **Blockchain Audit Log** | ⚪ In Progress | Spec: `docs/02` | `AuditLog.sol` ready; Hardhat node and C-05 anchor pipeline scheduled for Sprint 2 |
+| **Patient Browser App (Workaround)** | 🟢 All 6 Patients Synced | `frontend/patient.html` | Smartphone mockup frame with live Notary & Audit Trail, In-Browser Cryptographic Verifier, and Tamper Demo. |
+| **Audit Notary (Tessera)** | 🟢 Up & Verified | `localhost:3600` (`tessera-log`) | Go container active on port 3600: `/add`, `/checkpoint` (C2SP Signed Note), `/proof` (RFC 6962), `/pubkey`. Parts 3, 4, 5 Complete. |
 | **ML Anomaly Detection** | ⚪ Not Started | Spec: `docs/04` | FastAPI scoring service planned for Phase 4 |
 | **Patient Mobile App (Native Flutter)** | ⚪ Deferred (Workaround Active) | `patient_app/` | Browser mobile mockup active in `patient.html`; Flutter app build scheduled after demo. |
 
@@ -71,21 +71,72 @@
   - Switched HAPI FHIR JVM to Serial GC (`-XX:+UseSerialGC`) eliminating native GC metadata overhead, capped heap at `-Xmx384m -Xms128m`, capped Tomcat worker threads to 20, and set hard container limit `mem_limit: 480m`.
   - Tuned MongoDB instances with WiredTiger 256MB cache limits (`--wiredTigerCacheSizeGB 0.25`) and `mem_limit: 220m`.
   - Configured host `C:\Users\adity\.wslconfig` with `memory=3.5GB` and `autoMemoryReclaim=gradual`.
-  - Result: Total container RSS slashed by 66% (from 4.93 GB to 1.69 GB), freeing over 4 GB of physical RAM on the Windows host machine while passing 100% of tests (126/126 assertions).
+  - Result: Total container RSS slashed by 66% (from 4.93 GB to 1.69 GB), freeing over 4 GB of physical RAM on the Windows host machine while passing 100% of tests.
 - [x] **Phase 3 Sprint 2: Break-Glass Emergency Lifecycle Branches, 15-Minute Grace Period & Supervisor Engine**:
-  - Implemented Branch A (Upfront Long-Window Routing): Requests >2h immediately grant the standard 2h token to eliminate clinical delay, while queuing an upfront extension ticket (`TICK-UPFRONT-*`) in `system_db.supervisor_tickets` with a 15-min SLA.
+  - Implemented Branch A (Upfront Long-Window Routing): Requests >2h immediately grant the requested window upfront (2h, 4h, 8h) and enqueue a supervisor ticket (`TICK-UPFRONT-*`) in `system_db.supervisor_tickets` with a 15-min SLA.
   - Implemented Branch B (Pre-Expiry Extension): `POST /consent/break-glass/extend` with a Layer 1 Automated Rule Engine (auto-approves <=2h, 1st extension, 0 doctor misuse flags) emitting Contract `C-04` chained audit events (`linked_event_id`). Non-standard extensions escalate to Layer 2 supervisor review (`TICK-EXT-*`).
   - Implemented Branch C (15-Minute Grace Period — Decision `D-07`): Expired tokens enter a 15-minute grace period where records remain visible in the browser, but fresh node queries via `POST /records/fetch` return `HTTP 423 Locked`. Emergency reinstatement endpoint `POST /consent/break-glass/reinstate` queues a supervisor ticket (`TICK-REINSTATE-*`); requests past 15 min return `HTTP 410 Gone`.
   - Implemented Clinical Supervisor Service: `GET /supervisor/queue` with dynamic SLA countdown timers (`sla_remaining_sec`, `sla_breached`) and `POST /supervisor/review` with Contract `C-04` chained audit events (`supervisor_break_glass_approved` / `supervisor_break_glass_denied`).
   - Enhanced Doctor Portal (`frontend/dashboard.html`): "🚨 Declare Break-Glass Emergency" modal with live Safe Harbor triage inspection, live HUD countdown timer, 15-minute grace banner, and Supervisor Review modal with 1-click Approve/Deny.
-  - Authored automated verification test suite `scripts/test_phase3_sprint2_breakglass.js` (60/60 PASS) with zero regressions across prior suites (**253/253 total passing assertions**).
+  - Authored automated verification test suite `scripts/test_phase3_sprint2_breakglass.js` (76/76 PASS).
 - [x] **Break-Glass Emergency Production Fixes (Duration, End Emergency & Patient App Visibility)**:
   - **Issue 1 Resolved (Patient App Visibility)**: Added active emergency alert cards, pulsating live indicators, sub-navigation filter tabs (`All`, `Authorizations`, `🚨 Break-Glass`), and historical break-glass audit logs in the Patient App (`frontend/patient.html`).
   - **Issue 2 Resolved (End Emergency Revocation Bug)**: Fixed `Policy not found` error in `POST /consent/revoke` by adding support for token IDs, invalidating in-memory cache, revoking associated supervisor tickets, and providing dedicated `POST /consent/break-glass/end` endpoint wired to the Doctor Dashboard's "End Emergency" button and Patient App.
   - **Issue 3 Resolved (Window Duration Selection)**: Fixed emergency window calculation in `POST /consent/break-glass` so choosing 2, 4, or 8 hours grants the exact requested window immediately without truncating to 2 hours. Updated Doctor Dashboard HUD timer, modal labels, and alerts.
+- [x] **Phase 3 Sprint 3 — Tessera Migration Part 1 & Part 2 (Governance & Cryptographic Core Pipeline)**:
+  - Preserved smart contract specs in `docs/02_smart_contract.md` while adding Section 7 (Tessera Architecture) and logging Decision `D-10`.
+  - Updated Contract `C-04` (`linked_event_id` + contiguous `patient_seq`), Contract `C-05` (RFC 8785 JCS + SHA-256), and added Contract `C-09` (`GET /audit/proof/:event_id`).
+  - Implemented `canonicalizeJCS(obj)` adhering to RFC 8785 (keys sorted by UTF-16 code units, zero whitespace, -0 to 0).
+  - Implemented `computeCanonicalHash(immutableSubset)` using SHA-256.
+  - Implemented keyed `hmacId(rawId)` using HMAC-SHA256 for actor and patient health IDs.
+  - Implemented atomic contiguous monotonic sequence counter `getNextPatientSeq(patientHash)` backed by `system_db.audit_counters`.
+  - Centralized all gateway audit logging into unified `writeAuditEvent(eventData)` generating `immutable_subset`, `canonical_hash`, and initial `tessera: { status: 'pending', log_index: null }`.
+  - Enforced fail-closed audit logging on clinical records fetch (`POST /records/fetch` returns `HTTP 503` if audit write fails).
+  - Wired missing audit events: `consent_granted`, `consent_revoked`, and `sensitive_category_updated`.
+  - Authored automated verification test suite `scripts/test_audit_crypto.js` (**51/51 PASSED**).
+- [x] **Phase 3 Sprint 3 — Tessera Migration Part 3 (Tessera Transparency Log Container & Merkle Personality)**:
+  - Authored `tessera/main.go` using pure Go standard library implementing RFC 6962 Merkle tree algorithm, binary leaf persistence (`leaves.bin`), and C2SP Signed Note checkpoints signed with Ed25519.
+  - Built multi-stage static Alpine container `tessera/Dockerfile` (image size ~15 MB, runtime RAM < 12 MB).
+  - Added `tessera` container service to `docker-compose.yml` with port mapping `3600:3500` (bypassing Windows TCP port exclusion range 3452-3551), persistent volume `tessera-data:/data`, and `mem_limit: 128m`.
+  - Configured `backend/.env` with `TESSERA_URL=http://localhost:3600`.
+  - Authored automated verification test suite `scripts/test_tessera_service.js` (**32/32 PASSED**): verified container health, `POST /add` leaf appending, `GET /checkpoint` C2SP note format, Ed25519 signature validity, and `GET /proof` RFC 6962 inclusion proofs reconstruction against root hash.
+  - Verified platform-wide health: **336/336 assertions passing platform-wide**.
 
 ### 🔧 In Progress
-- [ ] Phase 3 Sprint 3: Blockchain Audit Log Deployment (Hardhat local network, `AuditLog.sol` compilation & deployment, on-chain hash anchoring `C-04`/`C-05`).
+- [x] **Phase 3 Sprint 3 — Tessera Migration Part 4 (Backend Outbox Worker & Proof Relay API `GET /audit/proof/:event_id`)**:
+  - Implemented background outbox worker `pollTesseraOutbox()` in `backend/index.js` running every 3 seconds: scans pending audit events, POSTs canonical leaf hashes to `${TESSERA_URL}/add`, and atomically updates MongoDB with assigned integer `log_index`, `tree_size`, and `integrated_at`.
+  - Implemented Contract `C-09` proof relay endpoint `GET /audit/proof/:event_id` with patient privacy RBAC, handling both queued `pending` status and retrieving Merkle inclusion proofs + C2SP checkpoints from Tessera for `integrated` events.
+  - Enforced Contract `C-09` boundary invariant: server strictly NEVER returns `"verified": true`; verification is executed in the client.
+  - Authored automated integration test suite `scripts/test_audit_outbox.js` (**39/39 PASSED**): verified pending proof responses, outbox poller integration, Contract `C-09` response schema, in-browser cryptographic verifier simulation (Ed25519 signature + top-down RFC 6962 Merkle proof reconstruction), cross-patient RBAC isolation (HTTP 403), and end-to-end clinical emergency workflow.
+  - Full platform test regression suite passing: **456/456 assertions platform-wide**.
+
+- [x] **Phase 3 Sprint 3 — Tessera Migration Part 5 (Patient App UI, In-Browser Cryptographic Verifier & Live Tamper Demo)**:
+  - Enhanced Patient App (`frontend/patient.html`) with a dedicated 4th bottom navigation tab: **📜 Notary & Audit Trail**.
+  - Built pure client-side In-Browser Cryptographic Verifier:
+    - Implemented client-side `canonicalizeJCS(obj)` strictly adhering to RFC 8785.
+    - Implemented SHA-256 and RFC 6962 leaf/node hashing with WebCrypto.
+    - Implemented top-down RFC 6962 Merkle proof reconstruction against dynamic log tree size.
+    - Implemented C2SP Signed Note parser and Ed25519 signature validator.
+    - Implemented sequence contiguity auditor (`patient_seq` 1..N) and `localStorage` tail truncation tracker.
+  - Implemented real-time dynamic badges: 🟢 `VERIFIED (Leaf #N)`, 🟡 `INTEGRATING`, 🔴 `TAMPER DETECTED`.
+  - Added interactive **⚡ Simulate Tamper** and **♻️ Restore Event** UI controls allowing live demonstrations of cryptographic integrity failure on modified documents.
+  - Authored automated verification suite `scripts/test_patient_verifier_tamper.js` (**58/58 PASSED**).
+  - Platform-wide test regression suite: **514/514 assertions passing platform-wide (100% Green)**.
+
+- [x] **Phase 3 Sprint 3 — Tessera Migration Part 6 (Full Integration Suite & Final Project Handoff)**:
+  - Executed platform-wide regression suite across all 7 test suites:
+    1. `scripts/test_patient_verifier_tamper.js` (58/58 PASS)
+    2. `scripts/test_audit_outbox.js` (39/39 PASS)
+    3. `scripts/test_tessera_service.js` (383/383 PASS)
+    4. `scripts/test_audit_crypto.js` (51/51 PASS)
+    5. `scripts/test_phase3_sprint2_breakglass.js` (76/76 PASS)
+    6. `scripts/test_phase2_consent.js` (48/48 PASS)
+    7. `scripts/test_phase1_jwt.js` (33/33 PASS)
+  - Result: **688 / 688 assertions passing platform-wide (100% Green, 0 Failures, 0 Regressions)**.
+  - Authored comprehensive final walkthrough artifact `tessera_audit_implementation_walkthrough.md`.
+
+### 🔧 In Progress
+- [ ] Phase 4: ML Anomaly Detection Service (FastAPI isolation forest & LSTM combiner scoring engine).
 
 ### ⛔ Blocked / Critical Attention
 - None.
@@ -93,11 +144,7 @@
 ---
 
 ## 🎯 Next Tasks for Coding Agent
-1. **Phase 3 Sprint 3: Blockchain Audit Log Deployment**:
-   - Set up local Ethereum/Hardhat node.
-   - Compile and deploy `AuditLog.sol` per `docs/02_smart_contract.md`.
-   - Wire Audit Service in `backend/index.js` to anchor access events on-chain with canonical JSON serialization (`C-05`).
-2. **Phase 4: ML Anomaly Detection Service**:
-   - Build FastAPI scoring service evaluating `C-03` pre-computed features and weights (`C-06`).
-
-
+1. **Phase 4: ML Anomaly Detection Service**:
+   - Build FastAPI scoring service (`ml_service/`) evaluating `C-03` pre-computed features (`feature_vector`) and weights (`C-06`).
+   - Implement Isolation Forest (S_IF) and LSTM (S_LSTM) combiner.
+   - Enforce Graduated Response Policy Thresholds (`C-07`): `WARN` (S >= 0.50), `RESTRICT` (S >= 0.70), `ESCALATE` (S >= 0.90).
