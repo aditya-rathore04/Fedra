@@ -46,15 +46,15 @@ FEDRA is a federated health information exchange architecture that allows clinic
 ```mermaid
 flowchart TD
     subgraph Clients ["Client Applications"]
-        Doctor["Doctor Portal (:3000/index.html & dashboard.html)"]
-        Patient["Patient App (:3000/patient.html)"]
+        Doctor["Doctor Portal (Port 3000)"]
+        Patient["Patient App with In-Browser Verifier"]
     end
 
-    subgraph Gateway ["Federated Gateway & Identity Service (:3000)"]
+    subgraph Gateway ["Federated Gateway and Identity Service (Port 3000)"]
         Auth["JWT Service (Contract C-01)"]
         Aggregator["Record Aggregator (Contract C-08)"]
-        PrivacyGate["Multi-Gate Privacy Filter (PSY / SEX / ETH)"]
-        ConsentEngine["Consent & Break-Glass Engine (Decision D-07)"]
+        PrivacyGate["Multi-Gate Privacy Filter (PSY, SEX, ETH)"]
+        ConsentEngine["Consent and Break-Glass Engine (Decision D-07)"]
         OutboxPoller["Tessera Outbox Worker (pollTesseraOutbox)"]
         ProofRelay["Proof Relay API (Contract C-09)"]
     end
@@ -65,32 +65,35 @@ flowchart TD
         Hosp3["Max Super Specialty Hospital (FHIR :8083 / Mongo :27019)"]
     end
 
-    subgraph CentralDB ["Central System Stores (:27020)"]
+    subgraph CentralDB ["Central System Stores (Port 27020)"]
         SystemMongo[("system_db (Users, Policies, Tokens, Audit Events)")]
-        RegistryMongo[("registry_db (Record Pointers & Patient Index)")]
+        RegistryMongo[("registry_db (Record Pointers and Patient Index)")]
     end
 
-    subgraph TransparencyLog ["Audit Notary Layer (:3600)"]
+    subgraph TransparencyLog ["Audit Notary Layer (Port 3600)"]
         Tessera["Tessera Transparency Log Container (tessera-log)"]
         MerkleEngine["RFC 6962 Merkle Tree Engine"]
-        Storage[("/data/leaves.bin & /data/ed25519.priv")]
+        Storage[("/data/leaves.bin and /data/ed25519.priv")]
     end
 
-    Doctor -->|Authenticate / Search / Break-Glass| Auth
-    Doctor -->|Fetch Consolidated Records| Aggregator
-    Aggregator -->|Parallel Query (Promise.allSettled)| Hosp1 & Hosp2 & Hosp3
+    Doctor -->|"Authenticate, Search, Break-Glass"| Auth
+    Doctor -->|"Fetch Consolidated Records"| Aggregator
+    Aggregator -->|"Parallel FHIR Query (Contract C-08)"| Hosp1
+    Aggregator -->|"Parallel FHIR Query (Contract C-08)"| Hosp2
+    Aggregator -->|"Parallel FHIR Query (Contract C-08)"| Hosp3
     Aggregator --> PrivacyGate
     PrivacyGate --> Doctor
 
-    Patient -->|Grant / Revoke / Unlock Categories| ConsentEngine
-    Patient -->|Inspect Notary & Verify Merkle Proofs| ProofRelay
+    Patient -->|"Grant, Revoke, Unlock Categories"| ConsentEngine
+    Patient -->|"Inspect Notary and Verify Merkle Proofs"| ProofRelay
 
     ConsentEngine --> SystemMongo
-    Aggregator -->|Fail-Closed Audit Write (Contract C-05)| SystemMongo
-    OutboxPoller -->|Scan Pending Events| SystemMongo
-    OutboxPoller -->|POST /add { leaf_hash }| Tessera
-    Tessera --> MerkleEngine --> Storage
-    ProofRelay -->|GET /proof?index=N| Tessera
+    Aggregator -->|"Fail-Closed Audit Write (Contract C-05)"| SystemMongo
+    OutboxPoller -->|"Scan Pending Events"| SystemMongo
+    OutboxPoller -->|"POST /add (canonical leaf hash)"| Tessera
+    Tessera --> MerkleEngine
+    MerkleEngine --> Storage
+    ProofRelay -->|"GET /proof (by log index)"| Tessera
 ```
 
 ---
