@@ -3,7 +3,7 @@
  * Usage: node scripts/test_phase1_jwt.js
  */
 
-const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:3000';
+const GATEWAY_URL = process.env.GATEWAY_URL || process.env.API_BASE || 'http://localhost:3000';
 const FHIR_PORTS = [8081, 8082, 8083];
 
 function decodeJwtPayload(token) {

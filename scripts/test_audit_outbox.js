@@ -24,7 +24,7 @@ try {
   ({ MongoClient } = require(path.join(backendModules, 'mongodb')));
 }
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = process.env.API_BASE || process.env.GATEWAY_URL || 'http://localhost:3000';
 const TESSERA_URL = 'http://localhost:3600';
 const MONGO_URI = 'mongodb://localhost:27020';
 

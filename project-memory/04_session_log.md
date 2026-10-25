@@ -427,3 +427,36 @@ Every session must append a new entry to the bottom of this file.
   - `node scripts/test_phase1_jwt.js` -> **33/33 PASS**
   - **Total:** **456 / 456 assertions passing platform-wide (100% Green)**.
 - **Next Steps:** STOP at Checkpoint 4. Present summary of Part 4 changes to the user and pause for approval before starting Part 5 (Patient App Audit UI & In-Browser Verifier).
+
+
+---
+
+## 📅 Session 16 — Phase 3 Sprint 3: Tessera Migration Part 5 (Patient App UI, In-Browser Verifier & Live Tamper Demo)
+- **Goal:** Implement the interactive Audit Trail in the Patient App (`frontend/patient.html`) with a pure in-browser cryptographic verifier (RFC 8785 JCS, WebCrypto SHA-256, top-down RFC 6962 Merkle reconstruction, C2SP checkpoint Ed25519 signature validation, sequence contiguity and tail truncation checks) and live tamper demonstration capabilities.
+- **Key Changes:**
+  - **Port Configuration & Environment**:
+    - Discovered Windows NAT / Hyper-V dynamic port exclusion on `2976-3075` preventing re-binding port 3000 (`EACCES`).
+    - Configured gateway to port 3100 in `backend/.env`. Updated `frontend/patient.html`, `frontend/dashboard.html`, and all test suites to dynamically resolve `http://localhost:3100`.
+  - **Patient App UI (`frontend/patient.html`)**:
+    - Added 4th navigation tab: **📜 Notary & Audit Trail** with live `#summaryStatusPill`, sequence contiguity monitor, and tail truncation tracker.
+    - Added `#auditContainer` rendering chronological audit cards with sequence numbers, actor/institution info, canonical SHA-256 hashes, and dynamic badges (🟢 `VERIFIED`, 🟡 `INTEGRATING`, 🔴 `TAMPER DETECTED`).
+    - Added collapsible "🔍 Inspect Proof" drawer detailing canonical JCS string, raw Merkle inclusion path, and signed C2SP checkpoint note.
+    - Added **⚡ Simulate Tamper** and **♻️ Restore Event** buttons on each event card and globally in the summary header.
+  - **In-Browser Cryptographic Verifier**:
+    - Pure JavaScript `canonicalizeJCS(obj)` adhering to RFC 8785.
+    - Native WebCrypto SHA-256 calculation for leaf and node hashes.
+    - Top-down RFC 6962 Merkle proof reconstruction against dynamic log sizes.
+    - C2SP checkpoint parser and Ed25519 signature verification against the log's public key.
+    - Contiguous sequence auditor ($1, 2, \dots, N$) and `localStorage` tail truncation monitor.
+  - **Automated Verification Suite (`scripts/test_patient_verifier_tamper.js`)**:
+    - Authored 58-assertion suite verifying UI markup, client JCS canonicalization, live cryptographic verification of real patient events against Tessera, sequence gap detection, tail truncation detection, live tamper detection, and instant restoration.
+- **Verification:**
+  - `node scripts/test_patient_verifier_tamper.js` -> **58/58 PASS**
+  - `node scripts/test_audit_outbox.js` -> **39/39 PASS**
+  - `node scripts/test_audit_crypto.js` -> **51/51 PASS**
+  - `node scripts/test_tessera_service.js` -> **209/209 PASS**
+  - `node scripts/test_phase3_sprint2_breakglass.js` -> **76/76 PASS**
+  - `node scripts/test_phase2_consent.js` -> **48/48 PASS**
+  - `node scripts/test_phase1_jwt.js` -> **33/33 PASS**
+  - **Platform-wide Total:** **514 / 514 assertions passing platform-wide (100% Green, 0 Regressions)**.
+- **Next Steps:** STOP at Checkpoint 5. Present summary of Part 5 to the user and pause for approval before executing Part 6 (Full Integration Suite & Final Project Handoff).

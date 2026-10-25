@@ -18,7 +18,7 @@ const assert = require('assert');
 const path = require('path');
 const crypto = require('crypto');
 
-const API_BASE = process.env.API_BASE || 'http://localhost:3000';
+const API_BASE = process.env.API_BASE || process.env.GATEWAY_URL || 'http://localhost:3000';
 
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;

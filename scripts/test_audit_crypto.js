@@ -34,7 +34,7 @@ const {
 } = require('../backend/index.js');
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27020';
-const API_URL = process.env.API_URL || 'http://localhost:3000';
+const API_URL = process.env.API_URL || process.env.GATEWAY_URL || process.env.API_BASE || 'http://localhost:3000';
 
 let passed = 0;
 let failed = 0;
