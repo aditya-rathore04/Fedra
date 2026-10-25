@@ -482,3 +482,32 @@ Every session must append a new entry to the bottom of this file.
   - **Grand Total:** **688 / 688 assertions passing platform-wide (100% Green, 0 Failures, 0 Regressions)**.
 - **Milestone Reached:** Phase 3 Sprint 3 (Tessera Transparency Log Audit Layer Migration) is **100% COMPLETE**.
 - **Next Target:** Phase 4 (ML Anomaly Detection Service — Isolation Forest & LSTM Combiner).
+
+
+---
+
+## 📅 Session 18 — Review 1 Progress Report Compilation (Tessera Migration & Project Completion)
+- **Goal:** Author the comprehensive VTU Seventh Semester Review 1 academic progress report incorporating the Tessera Transparency Log migration and updating completion status across Phases 1, 2, and 3.
+- **Key Accomplishments:**
+  - Authored `docs/FEDRA_Progress_Report.md` titled **"Review 1 Report - Fedra: Federated EHR Access System"**.
+  - Reflected the transition from Ethereum smart contracts to the Tessera Tile-Based Merkle Transparency Log (RFC 6962 / C2SP Signed Notes, Ed25519 signatures, RFC 8785 JCS canonicalization, HMAC-SHA256 pseudonymization, WebCrypto client-side verifier).
+  - Documented Option B (Evolutionary / Comparative Analysis) detailing why Ethereum was replaced: elimination of gas costs, mining latency reduction from 12-15s to sub-millisecond leaf appends, 66% container RAM footprint reduction (to 1.69 GB total RSS, with Tessera Go service under 12 MB RAM), and client-verifiable Merkle proofs.
+  - Updated completion status: Phases 1, 2, and 3 marked 100% complete and validated across 688 / 688 passing automated test assertions with zero regressions. Phase 4 (ML Anomaly Detection) marked active in progress.
+  - Authored structured Mermaid diagrams for system architecture, federated data flow, access token lifecycle, break-glass 3-branch lifecycle, Tessera Merkle tree and verification, ML anomaly pipeline, use cases, and database ERD.
+  - Applied strict unslop principles (no em dashes, sentence case headings, no decorative emojis, active voice, concrete numbers).
+- **Verification:** Verified file syntax and structure in `docs/FEDRA_Progress_Report.md`.
+- **Next Target:** Phase 4 (ML Anomaly Detection Service — Isolation Forest & LSTM Combiner).
+
+---
+
+## 📅 Session 19 — README GitHub Mermaid Syntax Hotfix
+- **Goal:** Fix GitHub Mermaid v10+ rendering failure in `README.md`.
+- **Root Cause:** GitHub's Mermaid parser threw `Parse error on line 35: ... -->|Parallel Query (Promise.allSettled)| ... Expecting ..., got 'PS'` due to unquoted parentheses, periods, ampersands, and curly braces in edge labels.
+- **Fix Applied:**
+  - Double-quoted all edge labels (`-->|"..."|`).
+  - Separated combined edges (`Aggregator --> ... Hosp1 & Hosp2 & Hosp3` became distinct lines for each hospital).
+  - Replaced ambiguous punctuation (slashes and bare ampersands) with clean text and commas.
+- **Verification:**
+  - Validated clean syntax in `README.md`.
+  - Removed temporary helper script `scripts/patch_readme_mermaid.js`.
+- **Next Target:** Phase 4 (ML Anomaly Detection Service — Isolation Forest & LSTM Combiner).
