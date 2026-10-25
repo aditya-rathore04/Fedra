@@ -527,6 +527,9 @@ async function startServer() {
         hClient.connect().catch(e => console.warn(`Hospital ${hId} Mongo connect warning: ${e.message}`));
       }
 
+      // Start background Tessera outbox worker
+      startTesseraOutbox();
+
       app.listen(PORT, () => {
         console.log(`Federated EHR Gateway running on http://localhost:${PORT}`);
       });
@@ -3080,6 +3083,174 @@ app.get('/audit/patient/:health_id', verifyJWT, async (req, res) => {
   }
 });
 
+
+// ==========================================
+// 8. TESSERA TRANSPARENCY LOG PROOF RELAY & OUTBOX WORKER
+// ==========================================
+
+let isPollingTessera = false;
+let tesseraIntervalId = null;
+
+/**
+ * Background outbox poller for the Tessera transparency log.
+ * Scans for audit events with 'pending' status, pushes leaf hashes to Tessera /add,
+ * and records the assigned log_index and tree_size atomically in MongoDB.
+ */
+async function pollTesseraOutbox() {
+  if (isPollingTessera) return;
+  if (!systemDb) return;
+
+  isPollingTessera = true;
+  try {
+    const pendingEvents = await systemDb.collection('audit_events')
+      .find({
+        $or: [
+          { 'tessera.status': 'pending' },
+          { 'tessera.status': { $exists: false }, canonical_hash: { $exists: true } }
+        ]
+      })
+      .sort({ timestamp: 1 })
+      .limit(50)
+      .toArray();
+
+    if (!pendingEvents || pendingEvents.length === 0) {
+      return;
+    }
+
+    for (const event of pendingEvents) {
+      if (!event.canonical_hash || typeof event.canonical_hash !== 'string' || event.canonical_hash.length !== 64) {
+        console.warn(`[Tessera Outbox] Skipping event ${event.event_id} due to invalid canonical_hash`);
+        await systemDb.collection('audit_events').updateOne(
+          { event_id: event.event_id },
+          { $set: { 'tessera.status': 'error', 'tessera.error': 'Invalid canonical_hash' } }
+        );
+        continue;
+      }
+
+      try {
+        const response = await fetch(`${TESSERA_URL}/add`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ leaf_hash: event.canonical_hash })
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          console.warn(`[Tessera Outbox] /add failed for event ${event.event_id} (${response.status}): ${errText}`);
+          break; // Stop batch to preserve FIFO leaf sequencing
+        }
+
+        const data = await response.json();
+        await systemDb.collection('audit_events').updateOne(
+          { event_id: event.event_id },
+          {
+            $set: {
+              'tessera.status': 'integrated',
+              'tessera.log_index': data.log_index,
+              'tessera.tree_size': data.tree_size,
+              'tessera.integrated_at': new Date()
+            }
+          }
+        );
+      } catch (networkErr) {
+        console.warn(`[Tessera Outbox] Network error integrating event ${event.event_id}:`, networkErr.message);
+        break; // Stop batch and retry on next interval
+      }
+    }
+  } catch (err) {
+    console.error('[Tessera Outbox] Unexpected error during polling cycle:', err.message);
+  } finally {
+    isPollingTessera = false;
+  }
+}
+
+function startTesseraOutbox() {
+  const pollIntervalMs = parseInt(process.env.TESSERA_POLL_INTERVAL_MS || '3000', 10);
+  if (!tesseraIntervalId) {
+    tesseraIntervalId = setInterval(pollTesseraOutbox, pollIntervalMs);
+    console.log(`[Tessera Outbox] Worker scheduled every ${pollIntervalMs}ms (target: ${TESSERA_URL})`);
+    pollTesseraOutbox().catch(e => console.warn('[Tessera Outbox] Initial poll failed:', e.message));
+  }
+}
+
+function stopTesseraOutbox() {
+  if (tesseraIntervalId) {
+    clearInterval(tesseraIntervalId);
+    tesseraIntervalId = null;
+    console.log('[Tessera Outbox] Worker stopped');
+  }
+}
+
+// Retrieve Merkle inclusion proof and C2SP signed checkpoint (GET /audit/proof/:event_id — Contract C-09)
+app.get('/audit/proof/:event_id', verifyJWT, async (req, res) => {
+  const { event_id } = req.params;
+
+  if (!event_id) {
+    return res.status(400).json({ error: 'event_id parameter is required' });
+  }
+
+  try {
+    const event = await systemDb.collection('audit_events').findOne({ event_id });
+    if (!event) {
+      return res.status(404).json({ error: 'Audit event not found' });
+    }
+
+    // RBAC: Patients can only retrieve proofs for their own audit events
+    if (req.user.role === 'patient') {
+      let patientHealthId = req.user.health_id;
+      if (!patientHealthId) {
+        const userDoc = await systemDb.collection('users').findOne({ user_id: req.user.user_id });
+        patientHealthId = userDoc?.health_id;
+      }
+      const callerPatientHash = patientHealthId ? hmacId(patientHealthId) : null;
+      const isCallerSubject = (patientHealthId && event.subject_health_id === patientHealthId) ||
+                              (callerPatientHash && event.patient_hash === callerPatientHash) ||
+                              (event.patient && event.patient.health_id === patientHealthId);
+      if (!isCallerSubject) {
+        return res.status(403).json({ error: 'Access denied: Patients can only retrieve proofs for their own audit events' });
+      }
+    }
+
+    // Check integration state
+    if (!event.tessera || event.tessera.status === 'pending' || event.tessera.log_index === null || event.tessera.log_index === undefined) {
+      return res.status(200).json({
+        event_id: event.event_id,
+        status: 'pending',
+        message: 'Event is queued for transparency log integration',
+        canonical_hash: event.canonical_hash
+      });
+    }
+
+    // Retrieve Merkle inclusion proof from Tessera personality service
+    const tesseraRes = await fetch(`${TESSERA_URL}/proof?index=${event.tessera.log_index}`);
+    if (!tesseraRes.ok) {
+      const errText = await tesseraRes.text();
+      return res.status(502).json({
+        error: 'Failed to retrieve proof from transparency log',
+        status: 'log_error',
+        details: errText
+      });
+    }
+
+    const proofData = await tesseraRes.json();
+
+    // Contract C-09 Response Schema
+    return res.json({
+      event_id: event.event_id,
+      canonical_hash: event.canonical_hash,
+      log_index: proofData.leaf_index,
+      tree_size: proofData.tree_size,
+      inclusion_proof: proofData.inclusion_proof,
+      checkpoint: proofData.checkpoint,
+      origin: proofData.origin,
+      public_key: proofData.public_key_hex || proofData.public_key
+    });
+  } catch (err) {
+    console.error(`Audit proof query error for event ${event_id}:`, err);
+    return res.status(500).json({ error: 'Internal server error retrieving audit proof' });
+  }
+});
+
 if (require.main === module) {
   startServer();
 }
@@ -3092,6 +3263,9 @@ module.exports = {
   getNextPatientSeq,
   writeAuditEvent,
   normalizeLinkedEventId,
+  pollTesseraOutbox,
+  startTesseraOutbox,
+  stopTesseraOutbox,
   startServer,
   getSystemDb: () => systemDb,
   setSystemDb: (db) => { systemDb = db; }

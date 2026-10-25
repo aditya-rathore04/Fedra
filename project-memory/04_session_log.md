@@ -398,3 +398,32 @@ Every session must append a new entry to the bottom of this file.
   - `scripts/test_audit_crypto.js`: **51/51 PASS** (100% Green).
   - Total platform assertions: **336/336 passing platform-wide**.
 - **Next Steps:** STOP at Checkpoint 3. Present summary to user and pause for approval before starting Part 4 (Backend Outbox Worker & Proof Relay API `GET /audit/proof/:event_id`).
+
+
+---
+
+## 📅 Session 15 — Phase 3 Sprint 3: Tessera Migration Part 4 (Backend Outbox Worker & Proof Relay API)
+- **Goal:** Connect the backend gateway to the Tessera transparency log via an asynchronous outbox worker and implement the client-facing proof relay endpoint `GET /audit/proof/:event_id` adhering strictly to Contract `C-09`.
+- **Key Changes:**
+  - **Outbox Worker (`backend/index.js`)**:
+    - Implemented `pollTesseraOutbox()` with reentrancy mutex `isPollingTessera`.
+    - Scans `system_db.audit_events` for events with `'tessera.status': 'pending'` or unintegrated documents.
+    - POSTs `canonical_hash` to `http://localhost:3600/add`.
+    - Atomically updates MongoDB document with `tessera.status = 'integrated'`, integer `log_index`, `tree_size`, and `integrated_at`.
+    - Scheduled recurring 3-second poller in `startServer()` via `startTesseraOutbox()`, with `stopTesseraOutbox()` lifecycle helper.
+  - **Proof Relay API (`GET /audit/proof/:event_id` — Contract `C-09`)**:
+    - Protected by `verifyJWT` with patient RBAC isolation (patients can only fetch proofs for their own records; clinicians/supervisors/admins can audit).
+    - If event is pending integration, returns `HTTP 200` with `status: 'pending'`, `message`, and `canonical_hash`.
+    - If event is integrated, retrieves Merkle inclusion proof and C2SP signed checkpoint from `${TESSERA_URL}/proof?index=${log_index}` and returns Contract `C-09` schema.
+    - Preserved invariant: server strictly NEVER returns `"verified": true`.
+  - **Automated Integration Test Suite (`scripts/test_audit_outbox.js`)**:
+    - Authored comprehensive 39-assertion suite covering pending proof queries, outbox worker DB updates, Contract `C-09` schema validation, in-browser verifier simulation (Ed25519 signature + top-down RFC 6962 Merkle proof reconstruction against checkpoint root), cross-patient RBAC isolation (HTTP 403), non-existent event 404, unauthenticated 401, and end-to-end real clinical break-glass integration.
+- **Verification:**
+  - `node scripts/test_audit_outbox.js` -> **39/39 PASS**
+  - `node scripts/test_audit_crypto.js` -> **51/51 PASS**
+  - `node scripts/test_tessera_service.js` -> **209/209 PASS**
+  - `node scripts/test_phase3_sprint2_breakglass.js` -> **76/76 PASS**
+  - `node scripts/test_phase2_consent.js` -> **48/48 PASS**
+  - `node scripts/test_phase1_jwt.js` -> **33/33 PASS**
+  - **Total:** **456 / 456 assertions passing platform-wide (100% Green)**.
+- **Next Steps:** STOP at Checkpoint 4. Present summary of Part 4 changes to the user and pause for approval before starting Part 5 (Patient App Audit UI & In-Browser Verifier).

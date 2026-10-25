@@ -1,8 +1,8 @@
 # Current State of System
 
-> **Last Updated:** 2026-10-25 (Session 14)  
-> **Current Phase:** Phase 3 (Break-Glass Emergency Access & Tessera Transparency Log Audit Layer) — Sprint 3 Part 3 Complete  
-> **Target Milestone:** Phase 3 Sprint 3 Part 4 (Backend Outbox Worker & Proof Relay API `GET /audit/proof/:event_id`)
+> **Last Updated:** 2026-10-25 (Session 15)  
+> **Current Phase:** Phase 3 (Break-Glass Emergency Access & Tessera Transparency Log Audit Layer) — Sprint 3 Part 4 Complete  
+> **Target Milestone:** Phase 3 Sprint 3 Part 5 (Patient App UI, In-Browser Verifier & Live Tamper Demo)
 
 ---
 
@@ -23,7 +23,7 @@
 | **Audit Trail Service** | 🟢 Spec-Compliant | `GET /audit/patient/:id` | Contract C-04 hash chain + `patient_seq`, C-05 RFC 8785 JCS canonical hash, HMAC IDs, patient privacy RBAC. |
 | **Doctor Portal (Frontend)** | 🟢 Interactive Deep Viewer | `frontend/dashboard.html` | Access request modal, live token timer, clinical drawer with findings, codes & FHIR inspection. |
 | **Patient Browser App (Workaround)** | 🟢 All 6 Patients Synced | `frontend/patient.html` | Smartphone mockup frame, all 6 Indian patients, inbox, approval sheet, sensitive toggles, self-timeline. |
-| **Audit Notary (Tessera)** | 🟢 Up & Verified | `localhost:3600` (`tessera-log`) | Go container active on port 3600: `/add`, `/checkpoint` (C2SP Signed Note), `/proof` (RFC 6962), `/pubkey`. Part 3 Complete (32/32 tests pass). |
+| **Audit Notary (Tessera)** | 🟢 Up & Verified | `localhost:3600` (`tessera-log`) | Go container active on port 3600: `/add`, `/checkpoint` (C2SP Signed Note), `/proof` (RFC 6962), `/pubkey`. Parts 3 & 4 Complete (Proof relay API & outbox worker verified). |
 | **ML Anomaly Detection** | ⚪ Not Started | Spec: `docs/04` | FastAPI scoring service planned for Phase 4 |
 | **Patient Mobile App (Native Flutter)** | ⚪ Deferred (Workaround Active) | `patient_app/` | Browser mobile mockup active in `patient.html`; Flutter app build scheduled after demo. |
 
@@ -103,7 +103,15 @@
   - Verified platform-wide health: **336/336 assertions passing platform-wide**.
 
 ### 🔧 In Progress
-- [ ] Phase 3 Sprint 3: Tessera Transparency Log Deployment (Part 4 outbox poller & C-09 relay, Part 5 in-browser verifier).
+- [x] **Phase 3 Sprint 3 — Tessera Migration Part 4 (Backend Outbox Worker & Proof Relay API `GET /audit/proof/:event_id`)**:
+  - Implemented background outbox worker `pollTesseraOutbox()` in `backend/index.js` running every 3 seconds: scans pending audit events, POSTs canonical leaf hashes to `${TESSERA_URL}/add`, and atomically updates MongoDB with assigned integer `log_index`, `tree_size`, and `integrated_at`.
+  - Implemented Contract `C-09` proof relay endpoint `GET /audit/proof/:event_id` with patient privacy RBAC, handling both queued `pending` status and retrieving Merkle inclusion proofs + C2SP checkpoints from Tessera for `integrated` events.
+  - Enforced Contract `C-09` boundary invariant: server strictly NEVER returns `"verified": true`; verification is executed in the client.
+  - Authored automated integration test suite `scripts/test_audit_outbox.js` (**39/39 PASSED**): verified pending proof responses, outbox poller integration, Contract `C-09` response schema, in-browser cryptographic verifier simulation (Ed25519 signature + top-down RFC 6962 Merkle proof reconstruction), cross-patient RBAC isolation (HTTP 403), and end-to-end clinical emergency workflow.
+  - Full platform test regression suite passing: **456/456 assertions platform-wide**.
+
+### 🔧 In Progress
+- [ ] Phase 3 Sprint 3: Tessera Transparency Log Deployment (Part 5 in-browser verifier UI & live tamper demo).
 
 ### ⛔ Blocked / Critical Attention
 - None.
@@ -115,7 +123,7 @@
    - Part 1: Governance & Documentation Layer (Completed).
    - Part 2: Backend Cryptographic Core & Unified Audit Pipeline (Completed & Verified).
    - Part 3: Tessera Transparency Log Service Container (Completed & Verified).
-   - **Part 4: Backend Outbox Worker & Proof Relay API (`GET /audit/proof/:event_id`)** — AWAITING USER CONFIRMATION.
-   - Part 5: Patient App Audit UI & In-Browser Verifier (live Merkle proof validation & tamper demo).
+   - Part 4: Backend Outbox Worker & Proof Relay API (`GET /audit/proof/:event_id`) (Completed & Verified).
+   - **Part 5: Patient App Audit UI & In-Browser Verifier (live Merkle proof validation & tamper demo)** — AWAITING USER CONFIRMATION.
 2. **Phase 4: ML Anomaly Detection Service**:
    - Build FastAPI scoring service evaluating `C-03` pre-computed features and weights (`C-06`).
